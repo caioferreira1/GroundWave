@@ -12,7 +12,7 @@ export default async function CompanyOverviewPage({
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, name, website_url, profile, guardrails_md, inbound_webhook_token, posts_fetch_enabled",
+      "id, name, profile, guardrails_md, inbound_webhook_token, posts_fetch_enabled, posts_last_fetched_at, posts_last_error",
     )
     .eq("id", companyId)
     .maybeSingle();
@@ -42,16 +42,6 @@ export default async function CompanyOverviewPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-soft text-base font-semibold text-accent-strong">
-          {company.name.slice(0, 1).toUpperCase()}
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">{company.name}</h1>
-          {company.website_url && <p className="text-sm text-ink-muted">{company.website_url}</p>}
-        </div>
-      </div>
-
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         {stats.map((s) => (
           <Card key={s.label} className="p-4">
@@ -63,11 +53,31 @@ export default async function CompanyOverviewPage({
             </div>
           </Card>
         ))}
+        <Card className="p-4">
+          <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">Last run</p>
+          <div className="mt-2">
+            {company.posts_last_error ? (
+              <Badge variant="critical">Failed</Badge>
+            ) : company.posts_last_fetched_at ? (
+              <Badge variant="good">Ran</Badge>
+            ) : (
+              <Badge variant="neutral">Never</Badge>
+            )}
+          </div>
+          {company.posts_last_fetched_at && (
+            <p className="mt-2 text-xs text-ink-muted">
+              {new Date(company.posts_last_fetched_at).toLocaleString()}
+            </p>
+          )}
+          {company.posts_last_error && (
+            <p className="mt-1 text-xs break-words text-critical">{company.posts_last_error}</p>
+          )}
+        </Card>
       </div>
 
       <p className="text-sm text-ink-muted">
-        Settings, personas, posts, and post-generator tabs are built out in later phases
-        (see the plan) — this overview is the Phase 1 placeholder.
+        Configure keyword/subreddit search and review incoming posts in the Settings and Posts
+        tabs above. Personas and the post generator are built out in later phases.
       </p>
     </div>
   );
