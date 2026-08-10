@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { Badge, Button, Card, Input, Label, PageHeading } from "@/components/ui";
 import { createCompany } from "./actions";
 
 export default async function CompaniesPage() {
@@ -10,68 +11,54 @@ export default async function CompaniesPage() {
     .order("created_at", { ascending: true });
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-xl font-semibold text-neutral-900">Companies</h1>
-        <p className="text-sm text-neutral-500">
-          Each company gets its own Reddit monitoring, personas, and generated content.
-        </p>
-      </div>
+    <div className="space-y-10">
+      <PageHeading
+        title="Companies"
+        description="Each company gets its own Reddit monitoring, personas, and generated content."
+      />
 
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {(companies ?? []).map((c) => (
           <li key={c.id}>
-            <Link
-              href={`/companies/${c.id}`}
-              className="block rounded-lg border border-neutral-200 bg-white p-4 hover:border-neutral-400"
-            >
-              <p className="font-medium text-neutral-900">{c.name}</p>
-              {c.website_url && <p className="text-sm text-neutral-500">{c.website_url}</p>}
-              <p className="mt-2 text-xs text-neutral-400">
-                Ingestion {c.posts_fetch_enabled ? "enabled" : "disabled"}
-              </p>
+            <Link href={`/companies/${c.id}`}>
+              <Card className="flex items-start gap-3 p-4 transition-colors hover:border-accent">
+                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent-strong">
+                  {c.name.slice(0, 1).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium text-ink">{c.name}</p>
+                  {c.website_url && (
+                    <p className="truncate text-sm text-ink-muted">{c.website_url}</p>
+                  )}
+                  <div className="mt-2">
+                    <Badge variant={c.posts_fetch_enabled ? "good" : "neutral"}>
+                      {c.posts_fetch_enabled ? "Ingestion on" : "Ingestion off"}
+                    </Badge>
+                  </div>
+                </div>
+              </Card>
             </Link>
           </li>
         ))}
         {(companies ?? []).length === 0 && (
-          <li className="text-sm text-neutral-500">No companies yet — add the first one below.</li>
+          <li className="text-sm text-ink-muted">No companies yet — add the first one below.</li>
         )}
       </ul>
 
-      <form
-        action={createCompany}
-        className="max-w-sm space-y-3 rounded-lg border border-neutral-200 bg-white p-4"
-      >
-        <h2 className="text-sm font-medium text-neutral-900">Add a company</h2>
-        <div>
-          <label htmlFor="name" className="mb-1 block text-sm text-neutral-700">
-            Name
-          </label>
-          <input
-            id="name"
-            name="name"
-            required
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <div>
-          <label htmlFor="website_url" className="mb-1 block text-sm text-neutral-700">
-            Website (optional)
-          </label>
-          <input
-            id="website_url"
-            name="website_url"
-            type="url"
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          />
-        </div>
-        <button
-          type="submit"
-          className="rounded-md bg-neutral-900 px-3 py-2 text-sm font-medium text-white"
-        >
-          Create company
-        </button>
-      </form>
+      <Card className="max-w-sm p-5">
+        <form action={createCompany} className="space-y-4">
+          <h2 className="text-sm font-semibold text-ink">Add a company</h2>
+          <div>
+            <Label htmlFor="name">Name</Label>
+            <Input id="name" name="name" required />
+          </div>
+          <div>
+            <Label htmlFor="website_url">Website (optional)</Label>
+            <Input id="website_url" name="website_url" type="url" placeholder="https://" />
+          </div>
+          <Button type="submit">Create company</Button>
+        </form>
+      </Card>
     </div>
   );
 }

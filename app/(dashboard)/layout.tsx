@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { requireApprovedUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { Logo } from "@/components/logo";
+import { Badge } from "@/components/ui";
 import { signOut } from "../(auth)/login/actions";
+
+const navLinkClass =
+  "rounded-md px-2.5 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:bg-surface-muted hover:text-ink";
 
 export default async function DashboardLayout({
   children,
@@ -16,30 +21,39 @@ export default async function DashboardLayout({
     .select("role")
     .eq("user_id", user.id);
   const isAdmin = (roles ?? []).some((r) => r.role === "admin");
+  const isStaff = isAdmin || (roles ?? []).some((r) => r.role === "coworker");
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-6 py-3">
-        <nav className="flex items-center gap-4 text-sm">
-          <Link href="/companies" className="font-semibold text-neutral-900">
-            MAA Reddit Persona Engine
+    <div className="min-h-screen bg-bg">
+      <header className="flex items-center justify-between gap-6 border-b border-border bg-surface px-6 py-3">
+        <div className="flex items-center gap-5">
+          <Link href="/companies">
+            <Logo size={20} />
           </Link>
-          <Link href="/companies" className="text-neutral-600 hover:text-neutral-900">
-            Companies
-          </Link>
-          <Link href="/generic-post-generator" className="text-neutral-600 hover:text-neutral-900">
-            Post generator
-          </Link>
-          {isAdmin && (
-            <Link href="/admin/users" className="text-neutral-600 hover:text-neutral-900">
-              Users
+          <nav className="flex items-center gap-1">
+            <Link href="/companies" className={navLinkClass}>
+              Companies
             </Link>
-          )}
-        </nav>
-        <div className="flex items-center gap-3 text-sm text-neutral-500">
-          <span>{profile.display_name ?? profile.email}</span>
+            <Link href="/generic-post-generator" className={navLinkClass}>
+              Post generator
+            </Link>
+            {isAdmin && (
+              <Link href="/admin/users" className={navLinkClass}>
+                Users
+              </Link>
+            )}
+          </nav>
+        </div>
+        <div className="flex items-center gap-3">
+          <Badge variant={isAdmin ? "accent" : isStaff ? "neutral" : "warning"}>
+            {isAdmin ? "Admin" : isStaff ? "Staff" : "Client"}
+          </Badge>
+          <span className="text-sm text-ink-muted">{profile.display_name ?? profile.email}</span>
           <form action={signOut}>
-            <button type="submit" className="underline underline-offset-2">
+            <button
+              type="submit"
+              className="text-sm text-ink-muted underline underline-offset-2 hover:text-ink"
+            >
               Sign out
             </button>
           </form>

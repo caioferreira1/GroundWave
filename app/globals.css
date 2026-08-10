@@ -1,26 +1,90 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/*
+ * GroundWave Hub design tokens.
+ * Palette: a deep signal-teal accent on a cool, slightly hue-biased ground —
+ * a nod to "ground wave" radio propagation (a signal that travels close to
+ * the surface to reach further), fitting a tool built around listening for
+ * signal in the noise of Reddit. Semantic colors (good/warning/critical) are
+ * deliberately separate from the accent hue.
+ */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+:root {
+  --bg: #f5f7f7;
+  --surface: #ffffff;
+  --surface-muted: #eef2f2;
+  --ink: #0f2027;
+  --ink-muted: #57696f;
+  --border: #dce4e4;
+
+  --accent: #0e7c86;
+  --accent-strong: #0a5c64;
+  --accent-soft: #e3f1f1;
+
+  --good: #2f8f5b;
+  --good-soft: #e6f4ec;
+  --warning: #b8791a;
+  --warning-soft: #fbf0dd;
+  --critical: #c4432e;
+  --critical-soft: #fceae6;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg: #0a1416;
+    --surface: #101c1f;
+    --surface-muted: #16262a;
+    --ink: #eaf2f2;
+    --ink-muted: #8fa3a8;
+    --border: #233336;
+
+    --accent: #3fc9ce;
+    --accent-strong: #63d8dc;
+    --accent-soft: #173235;
+
+    --good: #4fbe83;
+    --good-soft: #123322;
+    --warning: #e0a63c;
+    --warning-soft: #3a2b10;
+    --critical: #e5715c;
+    --critical-soft: #3a1a14;
   }
 }
 
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-border: var(--border);
+
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+
+  --color-good: var(--good);
+  --color-good-soft: var(--good-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-critical: var(--critical);
+  --color-critical-soft: var(--critical-soft);
+
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

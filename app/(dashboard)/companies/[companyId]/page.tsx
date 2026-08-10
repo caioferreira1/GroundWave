@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { Badge, Card } from "@/components/ui";
 
 export default async function CompanyOverviewPage({
   params,
@@ -18,21 +19,53 @@ export default async function CompanyOverviewPage({
 
   if (!company) notFound();
 
+  const stats: Array<{ label: string; ready: boolean; readyText: string; notReadyText: string }> = [
+    {
+      label: "Ingestion",
+      ready: company.posts_fetch_enabled,
+      readyText: "Enabled",
+      notReadyText: "Disabled",
+    },
+    {
+      label: "Profile",
+      ready: Boolean(company.profile),
+      readyText: "Generated",
+      notReadyText: "Not generated",
+    },
+    {
+      label: "Guardrails",
+      ready: Boolean(company.guardrails_md),
+      readyText: "Set",
+      notReadyText: "Not set",
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-neutral-900">{company.name}</h1>
-        {company.website_url && <p className="text-sm text-neutral-500">{company.website_url}</p>}
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-soft text-base font-semibold text-accent-strong">
+          {company.name.slice(0, 1).toUpperCase()}
+        </div>
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-ink">{company.name}</h1>
+          {company.website_url && <p className="text-sm text-ink-muted">{company.website_url}</p>}
+        </div>
       </div>
 
-      <div className="rounded-lg border border-neutral-200 bg-white p-4 text-sm text-neutral-600">
-        <p className="mb-2 font-medium text-neutral-900">Status</p>
-        <p>Ingestion: {company.posts_fetch_enabled ? "enabled" : "disabled"}</p>
-        <p>Profile: {company.profile ? "generated" : "not generated yet"}</p>
-        <p>Guardrails: {company.guardrails_md ? "set" : "not set"}</p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {stats.map((s) => (
+          <Card key={s.label} className="p-4">
+            <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">{s.label}</p>
+            <div className="mt-2">
+              <Badge variant={s.ready ? "good" : "neutral"}>
+                {s.ready ? s.readyText : s.notReadyText}
+              </Badge>
+            </div>
+          </Card>
+        ))}
       </div>
 
-      <p className="text-sm text-neutral-400">
+      <p className="text-sm text-ink-muted">
         Settings, personas, posts, and post-generator tabs are built out in later phases
         (see the plan) — this overview is the Phase 1 placeholder.
       </p>
