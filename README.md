@@ -1,3 +1,7 @@
+**GroundWave Hub** — see [docs/PLAN.md](docs/PLAN.md) for the full project
+plan, current status, and architecture. Read that first when resuming work
+on this repo from any machine.
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
