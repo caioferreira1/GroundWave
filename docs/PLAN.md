@@ -37,8 +37,20 @@ trecho abaixo ainda disser o nome antigo, é resquício).*
   ressalva na seção "Verificação" mais abaixo. Ver "Fase 3 — notas de
   implementação" abaixo pros detalhes não óbvios (idioma da resposta,
   anti-impersonation, fallback sem persona).
-- ⏭️ **Próximo passo: Fase 4** (geração de posts originais, modo
-  genérico/empresa) — ainda não começada.
+- ✅ **Fase 4 implementada** (geração de posts originais, modo genérico +
+  empresa) — `lib/ai/post-generator.ts`, rotas `/generic-post-generator` e
+  `/companies/[companyId]/post-generator`, UI com card em destaque + histórico
+  expansível inline (sem modal) + toast (`sonner`, dependência nova). Dois
+  problemas reais apareceram no teste manual do usuário e foram corrigidos
+  nesta sessão: um erro de serialização de Server Action (função comum
+  envolvendo a action, em vez da action em si, passada pra um Client
+  Component) e um 404 transitório de fonte do Google em dev depois de limpar
+  o cache do Turbopack (não afeta build de produção, confirmado). `npm run
+  build`/`lint` limpos; chamada ao AI gateway confirmada funcionando fora do
+  Next. **Falta confirmação final do usuário** de que o fluxo completo
+  (gerar → destaque → histórico → copiar → deletar, nos dois modos) funciona
+  ponta a ponta no navegador pós-fix — ver "Fase 4 — notas de implementação" e
+  "Verificação" abaixo.
 - Detalhes completos de infra (URLs, IDs de projeto) na seção "Infra em
   produção" mais abaixo. Segredos (chaves, senhas, tokens) não ficam neste
   arquivo nem em memória — estão só em `.env.local` (local) e nas env vars da
@@ -123,15 +135,17 @@ app/
     companies/[companyId]/page.tsx            # overview (status cards)
     companies/[companyId]/settings/{page,actions}.tsx
     companies/[companyId]/posts/{page,actions}.tsx
-    generic-post-generator/                   # ainda não existe (Fase 4)
+    companies/[companyId]/post-generator/{page,actions,loading}.tsx  # Fase 4
+    generic-post-generator/{page,actions,loading}.tsx                # Fase 4
     admin/users/
   api/cron/reddit-ingest/route.ts      # Vercel Cron
   api/webhooks/posts/route.ts          # ingestão externa (Zapier/Make/n8n)
 lib/
   supabase/{server.ts, admin.ts, types.ts}
-  ai/{gateway.ts, classifier.ts}             # reply-generator/post-generator: Fase 3/4
-  reddit/{search.ts, ingest.ts}
+  ai/{gateway.ts, classifier.ts, reply-generator.ts, post-generator.ts}  # Fase 3/4
+  reddit/{search.ts, ingest.ts, subreddits.ts}   # subreddits.ts: Fase 4
   auth.ts                                     # personas.ts: Fase 3
+components/post-generator/{generate-button,post-generation-card,history-list,types}.tsx  # Fase 4
 scripts/import-personas.ts                    # ainda não existe (Fase 3)
 supabase/migrations/0001..0011*.sql   (ver nomes reais na pasta — seção abaixo)
 vercel.json
@@ -237,10 +251,14 @@ empresa entra sempre que existir. Mesmo fluxo de revisão do app de
 referência: rascunho editável → "marcar como postado" exige staff aprovado.
 
 **Geração de posts** (`lib/ai/post-generator.ts`) — dois modos na mesma
-função: genérico (sem empresa, subreddit aleatório de uma lista fixa, sem
-persona — praticamente igual ao que já existe hoje) e por empresa (subreddit
-sugerido da empresa, persona + guardrails igual ao fluxo de resposta). Grava
-em `post_generations` com `mode` e `company_id` nullable.
+função: genérico (sem empresa, subreddit aleatório de uma lista fixa em
+`lib/reddit/subreddits.ts`, sem persona) e por empresa (subreddit sugerido da
+empresa, persona + guardrails igual ao fluxo de resposta, reaproveitando
+`personaBriefing`/`ANTI_IMPERSONATION_NOTE`/`cleanComment` exportados de
+`reply-generator.ts`). Grava em `post_generations` com `mode` e `company_id`
+nullable. UI em `/generic-post-generator` e
+`/companies/[companyId]/post-generator`. Ver "Fase 4 — notas de
+implementação" abaixo.
 
 ## Fase 2 — notas de implementação (RapidAPI, o que aprendemos testando de verdade)
 
@@ -349,6 +367,59 @@ uma Server Action que já checou `requireStaff()`). Decisões que não são
 - Mesmo pós-processamento do app de referência: remove hífens/travessões
   residuais que o modelo às vezes cola apesar da regra.
 
+## Fase 4 — notas de implementação (gerador de posts originais)
+
+A tabela `post_generations` (migration 0008) e os types já existiam de antes
+— o que faltava era só `lib/ai/post-generator.ts` e a UI. Decisões que não
+são óbvias só lendo o código:
+
+- **Reaproveita `reply-generator.ts` em vez de duplicar**: `personaBriefing`,
+  `ANTI_IMPERSONATION_NOTE`, `cleanComment` e o tipo `PersonaRow` foram só
+  marcados `export` lá (nenhuma lógica mudou) e importados em
+  `post-generator.ts` — mesma escolha automática de persona best-fit ou
+  `null`, mesmo aviso anti-impersonation (a persona calibra vocabulário/tom
+  do post, nunca é uma identidade reivindicada), mesma limpeza de
+  hífens/travessões residuais.
+- **Modo genérico**: subreddit sorteado de `lib/reddit/subreddits.ts` (lista
+  fixa portada do app de referência), prompt sem persona/guardrails.
+- **Modo empresa**: subreddit sorteado de `companies.suggested_subreddits`
+  (erro claro se a empresa não tiver nenhum configurado), guardrails +
+  catálogo de personas ativas no prompt, igual ao fluxo de resposta.
+- **Sem modal**: decisão explícita do usuário — o app não tinha nenhum
+  componente Dialog ainda, então o histórico é um card que expande inline
+  (`components/post-generator/history-list.tsx`) em vez de abrir um modal
+  novo. `CopyButton` ganhou uma prop `label` opcional (antes só ícone) pra
+  virar os botões "Copy Title"/"Copy Body" do card em destaque.
+- **`sonner` é a primeira lib de toast do app** (não existia nenhuma antes).
+  Usada só no botão "Generate"
+  (`components/post-generator/generate-button.tsx`), que por isso é o único
+  ponto do app que chama uma Server Action direto via `useTransition` em vez
+  de `<form action={...}>` — necessário pra poder capturar erro/sucesso e
+  mostrar toast, e pra exibir o estado "Generating…".
+- **Bug real encontrado no teste manual do usuário** (RSC): passar
+  `(id) => deletePostGeneration.bind(null, id)` como prop pro
+  `HistoryList` (Client Component) quebra em runtime — "Functions cannot be
+  passed directly to Client Components unless...". O Next só deixa atravessar
+  a fronteira servidor→cliente a própria Server Action ou um `.bind()` dela,
+  nunca uma função comum que a envolve/retorna. Fix: as páginas passam a
+  action já pronta como prop (com `companyId` pré-vinculado no modo empresa
+  via `.bind(null, companyId)` feito no Server Component), e o
+  `.bind(null, post.id)` final acontece dentro do próprio `HistoryList`, na
+  hora de montar o `<form action={...}>` de cada item.
+- **Problema separado, de ambiente, não de código**: o dev server que já
+  estava rodando havia acumulado corrupção de hot-reload do Turbopack (várias
+  edições de arquivo numa sessão longa geraram `ReferenceError`s soltos nos
+  logs) e isso derrubou a primeira chamada real ao AI gateway com
+  `TypeError: fetch failed` — confirmado que o gateway em si funcionava
+  (teste direto via Node, fora do Next, voltou 200 com resposta real do
+  modelo). Ao reiniciar o servidor pra limpar esse estado, limpar o cache
+  `.next` expôs um segundo problema: um 404 real (não só local) do CDN do
+  Google Fonts pra alguns arquivos do IBM Plex Sans, derrubando o app inteiro
+  em dev (toda página, não só Post Generator). `npm run build` funcionou
+  normalmente com Turbopack no mesmo momento, então não é um bug permanente
+  da combinação Turbopack + `next/font/google` nesta versão — foi tratado
+  como transitório e resolvido reiniciando de novo.
+
 ## Autenticação e aprovação de staff
 
 Supabase Auth (email+senha) + `@supabase/ssr`. Signup cria `profiles` como
@@ -425,7 +496,14 @@ system de verdade em vez de estilo neutro genérico:
    revisão humana → marcado como postado). Ver "Fase 3 — notas de
    implementação" logo abaixo da seção "Import das personas" pros detalhes
    que não são óbvios.
-4. **Geração de posts** — migration 0008 (já aplicada), os dois modos, UI de criação.
+4. ✅ **Geração de posts** (implementada) — migration 0008 (já aplicada),
+   `lib/ai/post-generator.ts` com os dois modos, rotas
+   `/generic-post-generator` e `/companies/[companyId]/post-generator`.
+   Entrega: staff gera posts originais com IA (genérico ou calibrado por
+   empresa/persona), vê destaque + histórico expansível, copia título/corpo,
+   deleta. Ver "Fase 4 — notas de implementação" pros detalhes não óbvios
+   (dois bugs reais corrigidos durante o teste manual). **Falta confirmação
+   final do usuário** do clique-a-clique completo no navegador pós-fix.
 5. **Polimento (depois)** — notificações, dashboards/analytics (o app de
    referência tem gráficos de SLA/tendência que podem ser portados depois),
    credenciais de API por empresa, segunda empresa-piloto além da MAA.
@@ -458,8 +536,17 @@ system de verdade em vez de estilo neutro genérico:
   `updateCompanySettings` já validados nas Fases 1/2, e `npm run build`
   type-checou todo o JSX das páginas novas, mas ainda vale um teste manual
   no navegador antes de considerar 100% fechado.
-- Fase 4: gerar um post no modo genérico e um no modo empresa, conferir
-  `post_generations` com `mode`/`company_id`/`persona_id` corretos.
+- Fase 4: `npm run build`/`lint` limpos; smoke test de rotas não-autenticadas
+  (redirect pra `/login`, sem 500) via `curl`; chamada direta ao AI gateway
+  confirmada funcionando fora do Next (script Node avulso, resposta real do
+  modelo). No teste manual do usuário no navegador apareceram dois problemas,
+  corrigidos nesta sessão (ver "Fase 4 — notas de implementação"): erro de
+  serialização de Server Action no histórico, e um 404 transitório de fonte
+  do Google em dev depois de limpar o cache do Turbopack (não afeta build de
+  produção). **Ainda falta**: usuário confirmar no navegador, pós-fix, que
+  gerar/copiar/expandir histórico/deletar funcionam ponta a ponta nos dois
+  modos, e conferir no Supabase que `post_generations` grava
+  `mode`/`company_id`/`persona_id` corretos em cada caso.
 
 ## Arquivos de referência mais importantes (não modificar, só consultar)
 
