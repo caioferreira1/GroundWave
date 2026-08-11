@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { cx } from "@/lib/cx";
 import { Card } from "./card";
 
 export function StatCard({
@@ -7,16 +8,18 @@ export function StatCard({
   label,
   value,
   hint,
+  className,
 }: {
   icon: LucideIcon;
   label: string;
   value: ReactNode;
   hint?: ReactNode;
+  className?: string;
 }) {
   return (
-    <Card className="p-4">
+    <Card interactive className={cx("p-4", className)}>
       <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-ink-muted uppercase">
-        <span className="bg-gradient-brand flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white">
+        <span className="bg-accent flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white">
           <Icon className="h-3.5 w-3.5" strokeWidth={2} />
         </span>
         {label}

@@ -15,6 +15,8 @@ import {
   Textarea,
 } from "@/components/ui";
 import { Drama } from "lucide-react";
+import { cx } from "@/lib/cx";
+import { PersonaMarkdown } from "@/components/personas/persona-markdown";
 import { updatePersona } from "./actions";
 
 export default async function CompanyPersonasPage({
@@ -51,7 +53,10 @@ export default async function CompanyPersonasPage({
           {(personas ?? []).map((persona) => {
             const updateAction = updatePersona.bind(null, companyId, persona.id);
             return (
-              <Card key={persona.id}>
+              <Card
+                key={persona.id}
+                className={cx("border-l-4", persona.is_active ? "border-l-accent" : "border-l-transparent")}
+              >
                 <CardHeader>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <CardTitle className="min-w-0 truncate font-mono text-xs text-ink-muted">{persona.slug}</CardTitle>
@@ -100,9 +105,9 @@ export default async function CompanyPersonasPage({
                 ) : (
                   <CardContent>
                     <p className="text-sm font-medium text-ink">{persona.display_name}</p>
-                    <pre className="max-h-64 overflow-y-auto rounded-md bg-surface-muted p-3 text-xs whitespace-pre-wrap text-ink-muted">
-                      {persona.content_md}
-                    </pre>
+                    <div className="max-h-96 overflow-y-auto rounded-md bg-surface-muted p-4">
+                      <PersonaMarkdown content={persona.content_md} />
+                    </div>
                   </CardContent>
                 )}
               </Card>

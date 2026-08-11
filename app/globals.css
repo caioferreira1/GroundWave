@@ -1,14 +1,15 @@
 @import "tailwindcss";
 
 /*
- * GroundWave Hub design tokens — v4 ("bold gradients", no purple).
- * Neutral: unchanged quiet, true-cool (zinc-adjacent) scale — color lives in
- * the accent system, not the neutrals, so surfaces stay calm and legible.
- * Accent: a two-stop brand gradient, sky blue -> Reddit orange (`--accent`
- * and `--accent-2`, the "ground wave" signal meeting the platform it
- * monitors). Most UI still uses flat `--accent`, but primary CTAs, avatars,
- * active nav, and decorative backgrounds pull in `--gradient-brand` for a
- * premium/tech feel (Stripe/Vercel-ish) instead of a flat single hue.
+ * GroundWave Hub design tokens — v5 ("Stripe light").
+ * Light-only: no dark mode. Neutral scale is cool/blue-tinted (Stripe's
+ * "Slate"), surfaces are white cards floating on a pale blue-gray page
+ * background. Accent is a flat blurple (`--accent`) for CTAs, active nav,
+ * and emphasis — no gradient on interactive controls. The brand gradient
+ * (`--gradient-brand`, blurple -> cyan) is reserved for decoration only:
+ * the ambient background glow and the chart line/area gradients — it never
+ * appears on a clickable surface, so gradient = "the AI is alive/ambient",
+ * flat accent = "you can act on this".
  * Semantic (good/warning/critical) intentionally use conventional,
  * unambiguous hues, kept distinct from the accent hue.
  *
@@ -24,29 +25,29 @@
  *   duration-300 → mobile drawer slide/backdrop only
  *   ease-out for entering, ease-in-out for elements that open AND close.
  *   Nothing animates longer than 300ms, except the ambient decorative
- *   background drift and shimmer/pulse loading states, which run slow and
- *   continuous by design (they're atmosphere, not feedback).
+ *   background drift, shimmer/pulse loading states, and the chart draw-in
+ *   / flowing-data lines, which run slow and continuous by design (they're
+ *   atmosphere, not feedback).
  */
 
 :root {
-  --bg: #fafafa;
+  --bg: #f6f9fc;
   --surface: #ffffff;
-  --surface-muted: #f4f4f6;
-  --surface-hover: #ececef;
-  --ink: #18181b;
-  --ink-muted: #6b6b76;
-  --border: #e4e4e8;
-  --border-strong: #d4d4d9;
-  --overlay: rgb(24 24 27 / 0.45);
+  --surface-muted: #f1f5f9;
+  --surface-hover: #e9eef4;
+  --ink: #0a2540;
+  --ink-muted: #425466;
+  --border: #e3e8ee;
+  --border-strong: #cbd2d9;
+  --overlay: rgb(10 37 64 / 0.45);
 
-  --accent: #0ea5e9;
-  --accent-strong: #0284c7;
-  --accent-soft: #e0f2fe;
-  --accent-2: #ff4500;
-  --accent-2-soft: #fff2e8;
-  --gradient-brand: linear-gradient(135deg, var(--accent) 0%, #38bdf8 45%, var(--accent-2) 100%);
-  --glow-accent: 0 0 0 1px rgb(14 165 233 / 0.12), 0 10px 26px -6px rgb(14 165 233 / 0.4), 0 4px 12px -4px
-      rgb(255 69 0 / 0.25);
+  --accent: #635bff;
+  --accent-strong: #4b44d6;
+  --accent-soft: rgb(99 91 255 / 0.1);
+  --accent-2: #ff7324;
+  --accent-2-soft: rgb(255 115 36 / 0.1);
+  --glow-cyan: #00d4ff;
+  --gradient-brand: linear-gradient(135deg, var(--accent) 0%, var(--glow-cyan) 100%);
 
   --good: #059669;
   --good-soft: #ecfdf5;
@@ -55,45 +56,11 @@
   --critical: #dc2626;
   --critical-soft: #fef2f2;
 
-  --shadow-xs: 0 1px 2px rgb(24 24 27 / 0.04);
-  --shadow-sm: 0 1px 3px rgb(24 24 27 / 0.06), 0 1px 2px rgb(24 24 27 / 0.04);
-  --shadow-md: 0 4px 12px rgb(24 24 27 / 0.08), 0 2px 4px rgb(24 24 27 / 0.04);
-  --shadow-lg: 0 12px 32px rgb(24 24 27 / 0.14), 0 4px 8px rgb(24 24 27 / 0.05);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0a0a0c;
-    --surface: #131316;
-    --surface-muted: #1b1b1f;
-    --surface-hover: #232327;
-    --ink: #f2f2f4;
-    --ink-muted: #9a9aa3;
-    --border: #2a2a2f;
-    --border-strong: #38383f;
-    --overlay: rgb(0 0 0 / 0.6);
-
-    --accent: #38bdf8;
-    --accent-strong: #7dd3fc;
-    --accent-soft: #0b2a3d;
-    --accent-2: #ff7a45;
-    --accent-2-soft: #3a1c0a;
-    --gradient-brand: linear-gradient(135deg, var(--accent) 0%, #7dd3fc 45%, var(--accent-2) 100%);
-    --glow-accent: 0 0 0 1px rgb(56 189 248 / 0.25), 0 10px 30px -6px rgb(56 189 248 / 0.5), 0 4px 16px -4px
-        rgb(255 122 69 / 0.3);
-
-    --good: #34d399;
-    --good-soft: #0b2f22;
-    --warning: #fbbf24;
-    --warning-soft: #2e2107;
-    --critical: #f87171;
-    --critical-soft: #2d1113;
-
-    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.3);
-    --shadow-sm: 0 1px 3px rgb(0 0 0 / 0.35);
-    --shadow-md: 0 4px 14px rgb(0 0 0 / 0.4);
-    --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.5);
-  }
+  --shadow-xs: 0 1px 2px rgb(60 66 87 / 0.06);
+  --shadow-sm: 0 2px 5px rgb(60 66 87 / 0.08), 0 1px 1px rgb(0 0 0 / 0.12);
+  --shadow-hover: 0 7px 14px 0 rgb(60 66 87 / 0.1), 0 3px 6px 0 rgb(0 0 0 / 0.1);
+  --shadow-md: 0 10px 20px rgb(60 66 87 / 0.12), 0 3px 6px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 20px 40px rgb(60 66 87 / 0.16), 0 6px 12px rgb(0 0 0 / 0.08);
 }
 
 @theme inline {
@@ -112,6 +79,7 @@
   --color-accent-soft: var(--accent-soft);
   --color-accent-2: var(--accent-2);
   --color-accent-2-soft: var(--accent-2-soft);
+  --color-glow-cyan: var(--glow-cyan);
 
   --color-good: var(--good);
   --color-good-soft: var(--good-soft);
@@ -122,9 +90,9 @@
 
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
+  --shadow-hover: var(--shadow-hover);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
-  --shadow-glow: var(--glow-accent);
 
   --font-sans: var(--font-plex-sans);
   --font-mono: var(--font-plex-mono);
@@ -132,6 +100,9 @@
   --animate-fade-in-up: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-shimmer: shimmer 1.8s ease-in-out infinite;
   --animate-drift: drift 16s ease-in-out infinite;
+  --animate-draw-in: draw-in 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-dash-flow: dash-flow 1.4s linear infinite;
+  --animate-border-flow: border-flow 3s linear infinite;
 }
 
 @keyframes fade-in-up {
@@ -164,6 +135,33 @@
   }
 }
 
+/* SVG line charts use pathLength="1" so dash values are fraction-of-length,
+   independent of actual pixel geometry. */
+@keyframes draw-in {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Dash pattern in components must be a divisor of 0.24 (e.g. "0.04 0.08") so the loop is seamless. */
+@keyframes dash-flow {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -0.24;
+  }
+}
+
+@keyframes border-flow {
+  to {
+    background-position: 200% center;
+  }
+}
+
 body {
   background: var(--bg);
   color: var(--ink);
@@ -171,10 +169,6 @@ body {
 
 .bg-gradient-brand {
   background-image: var(--gradient-brand);
-}
-
-.shadow-glow {
-  box-shadow: var(--glow-accent);
 }
 
 ::selection {

@@ -112,9 +112,9 @@ export type Database = {
         Row: {
           id: string;
           company_id: string | null;
-          author: string;
+          author: string | null;
           url: string;
-          content: string;
+          content: string | null;
           posted_at: string | null;
           upvotes: number | null;
           subreddit: string | null;
@@ -133,13 +133,13 @@ export type Database = {
           comment_generated_at: string | null;
           comment_posted_at: string | null;
           comment_posted_by: string | null;
+          comment_views_count: number | null;
+          is_manual: boolean;
           created_at: string;
           updated_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["posts"]["Row"]> & {
-          author: string;
           url: string;
-          content: string;
         };
         Update: Partial<Database["public"]["Tables"]["posts"]["Row"]>;
         Relationships: [];
@@ -175,6 +175,7 @@ export type Database = {
           created_by: string | null;
           posted_at: string | null;
           posted_by: string | null;
+          views_count: number | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["post_generations"]["Row"]> & {

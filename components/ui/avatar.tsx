@@ -18,7 +18,7 @@ export function Avatar({
   return (
     <span
       className={cx(
-        "bg-gradient-brand inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white shadow-xs",
+        "bg-accent inline-flex shrink-0 items-center justify-center rounded-full font-semibold text-white shadow-xs",
         avatarSizes[size],
         className,
       )}

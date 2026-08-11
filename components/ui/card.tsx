@@ -11,7 +11,7 @@ export function Card({
       className={cx(
         "rounded-lg border border-border bg-surface shadow-xs",
         interactive &&
-          "transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-glow",
+          "transition-all duration-200 hover:-translate-y-0.5 hover:border-accent/30 hover:shadow-hover",
         className,
       )}
       {...props}

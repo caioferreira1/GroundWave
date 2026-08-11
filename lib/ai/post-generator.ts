@@ -44,18 +44,37 @@ REGRAS para parecer 100% humano (nunca pode parecer escrito por IA):
 Escreva no idioma predominante do subreddit (geralmente inglês). O título deve ser natural e chamativo, e o corpo envolvente, respeitando o estilo típico daquela comunidade.`;
 
 /**
+ * Company mode only: nudges the model to drop the brand (or a more specific
+ * identifier called out in guardrails, e.g. a founder's distinctive name)
+ * into the post naturally sometimes — never as an ad, never every time.
+ * Without this the model has no idea the company exists (name isn't in the
+ * prompt at all otherwise) and the "no promotional tone" hard rule pushes it
+ * to never mention the brand at all.
+ */
+function buildMentionBlock(companyName: string): string {
+  return `\n\nORGANIC MENTION (company mode only):
+This post is for "${companyName}". Roughly one in three to four posts, mention it (or, if the guardrails above call out a more specific and unique identifier — like a founder's distinctive name — prefer that instead, since it reads as less promotional) casually in passing, the way a real redditor drops a name they follow or use: "I picked this up from ${companyName}", "there's this guy from ${companyName} who...", never as a pitch or a link. The rest of the time, don't mention it at all. Never force it, never repeat the same phrasing twice in a row.`;
+}
+
+/**
  * Shared between both modes: with no guardrails/personas it's exactly the
  * generic-mode prompt; with them, it layers brand guardrails and an optional
  * persona catalog on top — same shape as reply-generator's buildSystemPrompt,
  * except there's no manual persona override here (nothing to override yet,
  * this is the first draft of the post, not a reply to review).
  */
-function buildSystemPrompt(params: { guardrailsMd: string | null; personas: PersonaRow[] }): string {
-  const { guardrailsMd, personas } = params;
+function buildSystemPrompt(params: {
+  guardrailsMd: string | null;
+  personas: PersonaRow[];
+  companyName: string | null;
+}): string {
+  const { guardrailsMd, personas, companyName } = params;
 
   const guardrailsBlock = guardrailsMd
     ? `\n\nBRAND GUARDRAILS (mandatory — tone rules and any required disclaimers):\n${guardrailsMd}`
     : "";
+
+  const mentionBlock = companyName ? buildMentionBlock(companyName) : "";
 
   let personaBlock = "";
   if (personas.length > 0) {
@@ -70,7 +89,7 @@ function buildSystemPrompt(params: { guardrailsMd: string | null; personas: Pers
       ? `{"personaId":"<one of the ids above, or null if none fit>","rationale":"one short sentence on why this reader profile fits","theme":"...","title":"...","body":"..."}`
       : `{"theme":"...","title":"...","body":"..."}`;
 
-  return `${POST_HARD_RULES}${guardrailsBlock}${personaBlock}
+  return `${POST_HARD_RULES}${guardrailsBlock}${mentionBlock}${personaBlock}
 
 OUTPUT:
 Reply ONLY with valid JSON, no extra text, no markdown fences: ${outputSchema}`;
@@ -92,6 +111,7 @@ export async function generatePostGeneration(
   let companyId: string | null = null;
   let subreddit: string;
   let guardrailsMd: string | null = null;
+  let companyName: string | null = null;
   let personas: PersonaRow[] = [];
 
   if (opts.mode === "company") {
@@ -99,7 +119,7 @@ export async function generatePostGeneration(
 
     const { data: company, error: companyError } = await admin
       .from("companies")
-      .select("suggested_subreddits, guardrails_md")
+      .select("name, suggested_subreddits, guardrails_md")
       .eq("id", opts.companyId)
       .maybeSingle();
     if (companyError) throw new Error(companyError.message);
@@ -109,6 +129,7 @@ export async function generatePostGeneration(
     }
 
     guardrailsMd = company.guardrails_md;
+    companyName = company.name;
     subreddit =
       company.suggested_subreddits[Math.floor(Math.random() * company.suggested_subreddits.length)];
 
@@ -125,7 +146,7 @@ export async function generatePostGeneration(
   }
 
   const nonce = Math.random().toString(36).slice(2, 10);
-  const systemPrompt = buildSystemPrompt({ guardrailsMd, personas });
+  const systemPrompt = buildSystemPrompt({ guardrailsMd, personas, companyName });
   const userPrompt = `Subreddit: r/${subreddit}\nVariation nonce: ${nonce}`;
 
   const raw = await callAiGateway({

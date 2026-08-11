@@ -1,7 +1,14 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle, CopyButton } from "@/components/ui";
-import type { PostGenerationRow } from "./types";
+import { PostedStatus } from "./posted-status";
+import type { PostGenerationActions, PostGenerationRow } from "./types";
 
-export function PostGenerationCard({ post }: { post: PostGenerationRow }) {
+export function PostGenerationCard({
+  post,
+  actions,
+}: {
+  post: PostGenerationRow;
+  actions?: PostGenerationActions;
+}) {
   return (
     <Card className="overflow-hidden">
       <CardHeader className="pb-3">
@@ -24,6 +31,7 @@ export function PostGenerationCard({ post }: { post: PostGenerationRow }) {
           <CopyButton value={post.title} label="Copy Title" />
           <CopyButton value={post.body} label="Copy Body" />
         </div>
+        {actions && <PostedStatus post={post} actions={actions} />}
       </CardContent>
     </Card>
   );

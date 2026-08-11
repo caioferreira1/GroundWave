@@ -37,20 +37,48 @@ trecho abaixo ainda disser o nome antigo, é resquício).*
   ressalva na seção "Verificação" mais abaixo. Ver "Fase 3 — notas de
   implementação" abaixo pros detalhes não óbvios (idioma da resposta,
   anti-impersonation, fallback sem persona).
-- ✅ **Fase 4 implementada** (geração de posts originais, modo genérico +
-  empresa) — `lib/ai/post-generator.ts`, rotas `/generic-post-generator` e
-  `/companies/[companyId]/post-generator`, UI com card em destaque + histórico
-  expansível inline (sem modal) + toast (`sonner`, dependência nova). Dois
-  problemas reais apareceram no teste manual do usuário e foram corrigidos
-  nesta sessão: um erro de serialização de Server Action (função comum
-  envolvendo a action, em vez da action em si, passada pra um Client
-  Component) e um 404 transitório de fonte do Google em dev depois de limpar
-  o cache do Turbopack (não afeta build de produção, confirmado). `npm run
-  build`/`lint` limpos; chamada ao AI gateway confirmada funcionando fora do
-  Next. **Falta confirmação final do usuário** de que o fluxo completo
-  (gerar → destaque → histórico → copiar → deletar, nos dois modos) funciona
-  ponta a ponta no navegador pós-fix — ver "Fase 4 — notas de implementação" e
-  "Verificação" abaixo.
+- ✅ **Fase 4 implementada e verificada ponta a ponta** (geração de posts
+  originais, modo genérico + empresa) — `lib/ai/post-generator.ts`, rotas
+  `/generic-post-generator` e `/companies/[companyId]/post-generator`, UI com
+  card em destaque + histórico expansível inline (sem modal) + toast
+  (`sonner`). Dois problemas reais apareceram num teste manual anterior do
+  usuário e foram corrigidos numa sessão passada (ver "Fase 4 — notas de
+  implementação"). **Nesta sessão** (máquina nova, `.env.local` reconstituído
+  a partir das chaves que o usuário colou no chat): app rodado localmente
+  (`npm run dev`) e dirigido de ponta a ponta via Chromium headless
+  (Playwright) contra o Supabase/AI gateway/RapidAPI reais — login, Companies,
+  Overview/Posts/Settings/Personas da MAA, e os dois geradores de post
+  completos (gerar → toast "Post generated!" → card em destaque com
+  persona certa → Copy Title/Copy Body via clipboard real → expandir
+  histórico → Delete) todos confirmados via screenshot + log do servidor
+  (`generatePost`/`deletePostGeneration` 200, sem erro de console/página).
+  Conta de staff usada foi uma conta de QA temporária criada via
+  `service_role` (não a conta admin real do usuário, cuja senha não estava
+  disponível) — ver nota abaixo.
+- ✅ **Fase 5 (parcial) — Dashboards/analytics na Overview** (implementado e
+  verificado nesta sessão, mesma sessão da Fase 4 acima) — 3 gráficos novos
+  (`recharts`, dependência nova) na aba Overview de cada empresa: posts
+  postados, comentários gerados-vs-postados, e views reportadas (campo
+  manual — Reddit não expõe views via API, confirmado com o usuário). Exigiu
+  migration `0012_manual_views_metrics.sql` (2 colunas nullable,
+  `views_count`/`comment_views_count`) e — a peça que faltava — UI de "Mark
+  as posted"/"Unmark"/Views pro Post Generator, que até então tinha as
+  colunas `posted_at`/`posted_by` no schema (migration 0008) sem nenhuma
+  forma de setá-las. Ver o item 5 em "Fases de construção" abaixo pros
+  detalhes. **Migration aplicada
+  manualmente pelo usuário via SQL Editor do Supabase** (esta máquina não
+  tem CLI/psql — ver "Infra em produção" pra isso não pegar ninguém de
+  surpresa de novo).
+- **Conta de QA temporária**: `qa-verification+groundwave@example.com`
+  (senha só no histórico da sessão, não repetida aqui), criada direto via
+  Supabase Admin API (`auth.admin.createUser` + `profiles.status='approved'`
+  + `user_roles.role='coworker'`), pra poder logar sem a senha do admin real
+  (`caiomorgz@gmail.com`). Fica no Supabase até alguém decidir apagar — não
+  tem nada de sensível associado, só serve pra rodar o app localmente. Um
+  item do histórico de "Post Generator" da MAA foi deletado durante o teste
+  (ação real de `deletePostGeneration`, prova que o delete funciona) — sem
+  impacto, era conteúdo gerado de teste, não teve efeito nos dados `posts`/
+  `personas`/`companies` reais.
 - Detalhes completos de infra (URLs, IDs de projeto) na seção "Infra em
   produção" mais abaixo. Segredos (chaves, senhas, tokens) não ficam neste
   arquivo nem em memória — estão só em `.env.local` (local) e nas env vars da
@@ -444,9 +472,19 @@ empresas/personas e a ação de marcar como postado.
   app de referência) não vão de fato rodar mais que uma vez ao dia até fazer
   upgrade pro plano Pro. Não bloqueia nada agora, só vale saber.
 - Supabase: projeto próprio (ref `xmfmouontuvegtkwwhbw`), migrations
-  0001-0011 aplicadas (0009 corrige um bug real no trigger `handle_new_user` —
+  0001-0013 aplicadas (0009 corrige um bug real no trigger `handle_new_user` —
   `CASE WHEN` sem cast para o enum `account_status` quebrava todo signup;
-  0010/0011 são a ida e volta do default de `posts_sort`, ver Fase 2).
+  0010/0011 são a ida e volta do default de `posts_sort`, ver Fase 2; 0012 é
+  os campos manuais de views, ver Fase 5; 0013 torna `author`/`content`
+  opcionais em `posts` e adiciona `is_manual`, pro formulário "Log a manual
+  comment" em Posts). **Sem CLI do Supabase nem `psql`
+  instalados nesta máquina** (confirmado ao tentar aplicar a 0012) — só a
+  `SUPABASE_SERVICE_ROLE_KEY` (chave de API/PostgREST, não senha de banco),
+  que não serve pra rodar DDL. Migrations novas precisam ser coladas
+  manualmente no SQL Editor do Supabase (`supabase/all_migrations_combined.sql`
+  existe como cópia colável de todas juntas) até alguém instalar a CLI ou
+  passar a senha do Postgres (Project Settings → Database) pra um client
+  direto.
 
 ## Marca e design (aplicado)
 
@@ -496,17 +534,33 @@ system de verdade em vez de estilo neutro genérico:
    revisão humana → marcado como postado). Ver "Fase 3 — notas de
    implementação" logo abaixo da seção "Import das personas" pros detalhes
    que não são óbvios.
-4. ✅ **Geração de posts** (implementada) — migration 0008 (já aplicada),
-   `lib/ai/post-generator.ts` com os dois modos, rotas
+4. ✅ **Geração de posts** (completa, verificada ponta a ponta) — migration
+   0008 (já aplicada), `lib/ai/post-generator.ts` com os dois modos, rotas
    `/generic-post-generator` e `/companies/[companyId]/post-generator`.
    Entrega: staff gera posts originais com IA (genérico ou calibrado por
    empresa/persona), vê destaque + histórico expansível, copia título/corpo,
    deleta. Ver "Fase 4 — notas de implementação" pros detalhes não óbvios
-   (dois bugs reais corrigidos durante o teste manual). **Falta confirmação
-   final do usuário** do clique-a-clique completo no navegador pós-fix.
-5. **Polimento (depois)** — notificações, dashboards/analytics (o app de
-   referência tem gráficos de SLA/tendência que podem ser portados depois),
-   credenciais de API por empresa, segunda empresa-piloto além da MAA.
+   (dois bugs reais corrigidos durante o teste manual).
+5. **Polimento (em andamento)**:
+   - ✅ **Dashboards/analytics na Overview** (implementado e verificado nesta
+     sessão) — migration 0012 (`views_count`/`comment_views_count`, aplicada
+     manualmente pelo usuário via SQL Editor do Supabase, já que esta máquina
+     não tem CLI/psql), 3 gráficos novos (`recharts`) em
+     `app/(dashboard)/companies/[companyId]/page.tsx`: posts postados,
+     comentários gerados-vs-postados, e views reportadas — tudo com janela de
+     30 dias, gap-fill, tooltip e legenda custom, tema claro/escuro e
+     `prefers-reduced-motion` respeitados. Peça que faltava e foi construída
+     nesta sessão: `post_generations.posted_at`/`posted_by` já existiam no
+     schema (migration 0008) mas não tinham UI nenhuma — sem isso a métrica
+     de "posts postados" não tinha de onde vir dado. Views é campo 100%
+     manual (Reddit não expõe contagem de views via API), staff digita na UI
+     do Post Generator e da aba Posts. Ver `lib/analytics/` (bucketing +
+     queries) e `components/analytics/` (gráficos). Verificado com dados
+     reais + um lote de dados sintéticos temporários (gerado e depois
+     removido via `scripts/seed-analytics-demo.ts`) pra confirmar
+     bucketing/gap-fill com múltiplos pontos.
+   - Pendente: notificações, credenciais de API por empresa, segunda
+     empresa-piloto além da MAA.
 
 ## Verificação
 
@@ -539,14 +593,22 @@ system de verdade em vez de estilo neutro genérico:
 - Fase 4: `npm run build`/`lint` limpos; smoke test de rotas não-autenticadas
   (redirect pra `/login`, sem 500) via `curl`; chamada direta ao AI gateway
   confirmada funcionando fora do Next (script Node avulso, resposta real do
-  modelo). No teste manual do usuário no navegador apareceram dois problemas,
-  corrigidos nesta sessão (ver "Fase 4 — notas de implementação"): erro de
-  serialização de Server Action no histórico, e um 404 transitório de fonte
-  do Google em dev depois de limpar o cache do Turbopack (não afeta build de
-  produção). **Ainda falta**: usuário confirmar no navegador, pós-fix, que
-  gerar/copiar/expandir histórico/deletar funcionam ponta a ponta nos dois
-  modos, e conferir no Supabase que `post_generations` grava
-  `mode`/`company_id`/`persona_id` corretos em cada caso.
+  modelo). Numa sessão anterior, o teste manual do usuário no navegador
+  revelou dois problemas, já corrigidos (ver "Fase 4 — notas de
+  implementação"): erro de serialização de Server Action no histórico, e um
+  404 transitório de fonte do Google em dev (não afeta build de produção).
+  **Fechado nesta sessão**: fluxo completo (gerar → toast → destaque →
+  Copy Title/Copy Body → expandir histórico → Delete) dirigido de ponta a
+  ponta via Chromium headless nos dois modos (empresa MAA e genérico), contra
+  infra real — ver nota na "Status atual" acima pros detalhes. Não sobrou
+  nenhum erro de console/página nas duas rodadas. **Detalhe observado, não
+  bloqueante**: durante a sessão de teste automatizado (navegação rápida
+  entre abas via `page.goto` em sequência) o log do dev server mostrou
+  algumas vezes `Error: The destination stream closed early` — consistente
+  com abortar um RSC stream em voo ao navegar de novo antes dele terminar,
+  o que só acontece com navegação client-side muito mais rápida que um
+  humano clicando; não reproduzido como erro visível na UI nem nos
+  screenshots. Vale ficar de olho se aparecer de novo num uso normal.
 
 ## Arquivos de referência mais importantes (não modificar, só consultar)
 

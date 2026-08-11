@@ -3,7 +3,7 @@ import { cx } from "@/lib/cx";
 
 const buttonVariants = {
   primary:
-    "bg-gradient-brand text-white shadow-xs hover:shadow-glow hover:-translate-y-px active:translate-y-0 active:scale-[0.98]",
+    "bg-accent text-white shadow-xs hover:bg-accent-strong hover:shadow-hover hover:-translate-y-px active:translate-y-0 active:scale-[0.98]",
   secondary:
     "border border-border bg-surface text-ink hover:border-accent/40 hover:bg-surface-hover hover:-translate-y-px",
   ghost: "text-ink-muted hover:bg-surface-hover hover:text-ink",

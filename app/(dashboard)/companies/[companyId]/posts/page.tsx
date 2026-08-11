@@ -16,6 +16,7 @@ import {
   CardContent,
   CardFooter,
   EmptyState,
+  Input,
   PageHeading,
   SegmentedControl,
   SegmentedControlLink,
@@ -23,10 +24,13 @@ import {
   Textarea,
   buttonClass,
 } from "@/components/ui";
+import { ManualCommentDialog } from "@/components/posts/manual-comment-dialog";
 import {
+  addManualComment,
   generateComment,
   markCommentPosted,
   saveGeneratedComment,
+  setCommentViews,
   setHumanVerdict,
   unmarkCommentPosted,
 } from "./actions";
@@ -76,7 +80,7 @@ export default async function CompanyPostsPage({
   let query = supabase
     .from("posts")
     .select(
-      "id, author, url, content, subreddit, upvotes, posted_at, received_at, ai_status, is_relevant, relevance_score, ai_reasoning, ai_error, human_verdict, generated_comment, generated_comment_persona_id, generated_comment_persona_rationale, comment_posted_at, comment_posted_by",
+      "id, author, url, content, subreddit, upvotes, posted_at, received_at, ai_status, is_relevant, relevance_score, ai_reasoning, ai_error, human_verdict, generated_comment, generated_comment_persona_id, generated_comment_persona_rationale, comment_posted_at, comment_posted_by, comment_views_count, is_manual",
     )
     .eq("company_id", companyId)
     .order("posted_at", { ascending: false, nullsFirst: false })
@@ -111,9 +115,20 @@ export default async function CompanyPostsPage({
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name ?? p.email]));
   const staffMembers = (profiles ?? []).filter((p) => staffIds.has(p.id));
 
+  const boundAddManualComment = addManualComment.bind(null, companyId);
+
   return (
     <div className="space-y-6">
-      <PageHeading title="Posts" description="Reddit posts ingested for this company." />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <PageHeading title="Posts" description="Reddit posts ingested for this company." />
+        {isStaff && (
+          <ManualCommentDialog
+            action={boundAddManualComment}
+            staffMembers={staffMembers}
+            currentUserId={user?.id ?? null}
+          />
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center gap-6">
         <div className="space-y-1.5">
@@ -149,12 +164,40 @@ export default async function CompanyPostsPage({
       {(posts ?? []).length > 0 ? (
         <div className="space-y-3">
           {(posts ?? []).map((post) => (
-            <Card key={post.id}>
+            <Card key={post.id} interactive>
               <CardContent className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {post.is_manual ? (
+                    <Badge variant="accent">Manual entry</Badge>
+                  ) : (
+                    <>
+                      <Badge
+                        variant={
+                          post.ai_status === "processed"
+                            ? "good"
+                            : post.ai_status === "failed"
+                              ? "critical"
+                              : "neutral"
+                        }
+                      >
+                        {post.ai_status}
+                      </Badge>
+                      {post.ai_status === "processed" && (
+                        <Badge variant={post.is_relevant ? "good" : "neutral"}>
+                          {post.is_relevant ? "Relevant" : "Not relevant"} ({post.relevance_score})
+                        </Badge>
+                      )}
+                      {post.human_verdict && <Badge variant="accent">Human: {post.human_verdict}</Badge>}
+                    </>
+                  )}
+                </div>
+
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-muted">
-                  <span className="inline-flex items-center gap-1 font-medium text-ink">
-                    <User className="h-3.5 w-3.5" /> u/{post.author}
-                  </span>
+                  {post.author && (
+                    <span className="inline-flex items-center gap-1 font-medium text-ink">
+                      <User className="h-3.5 w-3.5" /> u/{post.author}
+                    </span>
+                  )}
                   {post.subreddit && (
                     <span className="inline-flex items-center gap-1">
                       <Hash className="h-3.5 w-3.5" /> r/{post.subreddit}
@@ -177,27 +220,7 @@ export default async function CompanyPostsPage({
                   </a>
                 </div>
 
-                <p className="line-clamp-3 text-sm text-ink">{post.content}</p>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge
-                    variant={
-                      post.ai_status === "processed"
-                        ? "good"
-                        : post.ai_status === "failed"
-                          ? "critical"
-                          : "neutral"
-                    }
-                  >
-                    {post.ai_status}
-                  </Badge>
-                  {post.ai_status === "processed" && (
-                    <Badge variant={post.is_relevant ? "good" : "neutral"}>
-                      {post.is_relevant ? "Relevant" : "Not relevant"} ({post.relevance_score})
-                    </Badge>
-                  )}
-                  {post.human_verdict && <Badge variant="accent">Human: {post.human_verdict}</Badge>}
-                </div>
+                {post.content && <p className="line-clamp-3 text-sm text-ink">{post.content}</p>}
 
                 {post.ai_reasoning && (
                   <p className="border-l-2 border-border pl-3 text-xs text-ink-muted italic">
@@ -207,9 +230,9 @@ export default async function CompanyPostsPage({
                 {post.ai_error && <p className="text-xs text-critical">{post.ai_error}</p>}
 
                 {post.is_relevant && (
-                  <div className="space-y-2 rounded-md border border-border bg-surface-muted p-3">
+                  <div className="space-y-2 rounded-lg border border-accent/15 bg-accent-soft p-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium tracking-wide text-ink-muted uppercase">
+                      <span className="text-xs font-medium tracking-wide text-accent-strong uppercase">
                         Reply draft
                       </span>
                       {post.generated_comment_persona_id ? (
@@ -217,6 +240,7 @@ export default async function CompanyPostsPage({
                           {personaMap.get(post.generated_comment_persona_id) ?? "Unknown persona"}
                         </Badge>
                       ) : (
+                        !post.is_manual &&
                         post.generated_comment && <Badge variant="neutral">No persona matched</Badge>
                       )}
                       {post.comment_posted_at && (
@@ -225,6 +249,28 @@ export default async function CompanyPostsPage({
                         </Badge>
                       )}
                     </div>
+
+                    {isStaff && post.comment_posted_at && (
+                      <form
+                        action={setCommentViews.bind(null, companyId, post.id)}
+                        className="flex items-center gap-2"
+                      >
+                        <label className="text-xs text-ink-muted" htmlFor={`views-${post.id}`}>
+                          Views
+                        </label>
+                        <Input
+                          id={`views-${post.id}`}
+                          type="number"
+                          name="comment_views_count"
+                          min={0}
+                          defaultValue={post.comment_views_count ?? ""}
+                          className="h-8 w-24 text-xs"
+                        />
+                        <button type="submit" className={buttonClass("secondary", "sm")}>
+                          Save
+                        </button>
+                      </form>
+                    )}
 
                     {post.generated_comment_persona_rationale && (
                       <p className="text-xs text-ink-muted italic">
@@ -257,22 +303,24 @@ export default async function CompanyPostsPage({
 
                     {isStaff && (
                       <div className="flex flex-wrap items-center gap-2">
-                        <form
-                          action={generateComment.bind(null, companyId, post.id)}
-                          className="flex items-center gap-2"
-                        >
-                          <Select name="persona_id" defaultValue="" className="h-8 w-auto text-xs">
-                            <option value="">Auto (AI picks persona)</option>
-                            {activePersonas.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.display_name}
-                              </option>
-                            ))}
-                          </Select>
-                          <button type="submit" className={buttonClass("secondary", "sm")}>
-                            {post.generated_comment ? "Regenerate" : "Generate reply"}
-                          </button>
-                        </form>
+                        {!post.is_manual && (
+                          <form
+                            action={generateComment.bind(null, companyId, post.id)}
+                            className="flex items-center gap-2"
+                          >
+                            <Select name="persona_id" defaultValue="" className="h-8 w-auto text-xs">
+                              <option value="">Auto (AI picks persona)</option>
+                              {activePersonas.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.display_name}
+                                </option>
+                              ))}
+                            </Select>
+                            <button type="submit" className={buttonClass("secondary", "sm")}>
+                              {post.generated_comment ? "Regenerate" : "Generate reply"}
+                            </button>
+                          </form>
+                        )}
 
                         {post.generated_comment &&
                           (post.comment_posted_at ? (
@@ -312,7 +360,7 @@ export default async function CompanyPostsPage({
                 )}
               </CardContent>
 
-              {isStaff && (
+              {isStaff && !post.is_manual && (
                 <CardFooter className="flex-wrap justify-end">
                   <form action={setHumanVerdict.bind(null, companyId, post.id, "relevant")}>
                     <button

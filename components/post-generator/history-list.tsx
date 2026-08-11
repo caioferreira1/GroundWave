@@ -4,7 +4,8 @@ import { useState } from "react";
 import { ChevronDown, Trash2 } from "lucide-react";
 import { Badge, Card, CopyButton, buttonClass } from "@/components/ui";
 import { cx } from "@/lib/cx";
-import type { PostGenerationRow } from "./types";
+import { PostedStatus } from "./posted-status";
+import type { PostGenerationActions, PostGenerationRow } from "./types";
 
 function formatRelativeDate(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -20,9 +21,11 @@ function formatRelativeDate(dateStr: string): string {
 export function HistoryList({
   posts,
   deleteAction,
+  actions,
 }: {
   posts: PostGenerationRow[];
   deleteAction: (id: string) => Promise<void>;
+  actions?: PostGenerationActions;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -79,6 +82,7 @@ export function HistoryList({
                     </button>
                   </form>
                 </div>
+                {actions && <PostedStatus post={post} actions={actions} />}
               </div>
             )}
           </Card>

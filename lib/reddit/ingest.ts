@@ -65,7 +65,10 @@ export async function insertAndClassifyPosts(
 
   await Promise.allSettled(
     (inserted ?? [])
-      .filter((p): p is typeof p & { company_id: string } => p.company_id !== null)
+      .filter(
+        (p): p is typeof p & { author: string; content: string; company_id: string } =>
+          p.company_id !== null && p.author !== null && p.content !== null,
+      )
       .map((p) => classifyPost(p)),
   );
 

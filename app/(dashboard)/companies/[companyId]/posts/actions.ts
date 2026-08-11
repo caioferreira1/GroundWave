@@ -30,7 +30,7 @@ export async function setHumanVerdict(
     .select("company_id, content")
     .single();
   if (error) throw new Error(error.message);
-  if (!post.company_id) return;
+  if (!post.company_id || post.content === null) return;
 
   const { error: exampleError } = await supabase.from("classifier_examples").insert({
     company_id: post.company_id,
@@ -102,6 +102,54 @@ export async function markCommentPosted(companyId: string, postId: string, formD
   revalidatePath(`/companies/${companyId}/posts`);
 }
 
+/**
+ * Logs a comment staff already posted on a Reddit thread that never went
+ * through ingestion/AI classification — e.g. one they found and replied to
+ * organically. Just the link, the comment text, and who posted it; writes a
+ * `posts` row with comment_posted_at/comment_generated_at set immediately
+ * (it's already live by the time this form is submitted) so it flows into
+ * the same "comments posted" / "reported views" metrics as AI-assisted
+ * replies (see lib/analytics/queries.ts) without needing author/content of
+ * the original post, which staff never pasted in.
+ */
+export async function addManualComment(companyId: string, formData: FormData) {
+  const { user } = await requireStaff();
+
+  const url = String(formData.get("url") ?? "").trim();
+  const comment = String(formData.get("comment") ?? "").trim();
+  const postedBy = String(formData.get("posted_by") ?? "").trim() || user.id;
+  if (!url) throw new Error("Reddit post URL is required");
+  if (!comment) throw new Error("Comment is required");
+
+  const supabase = await createClient();
+  const { data: posterRoles, error: roleError } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", postedBy)
+    .in("role", ["admin", "coworker"]);
+  if (roleError) throw new Error(roleError.message);
+  if (!posterRoles || posterRoles.length === 0) throw new Error("Selected user is not a staff member");
+
+  const subreddit = url.match(/reddit\.com\/r\/([^/]+)/i)?.[1] ?? null;
+  const now = new Date().toISOString();
+
+  const { error } = await supabase.from("posts").insert({
+    company_id: companyId,
+    url,
+    subreddit,
+    is_manual: true,
+    ai_status: "processed",
+    is_relevant: true,
+    generated_comment: comment,
+    comment_generated_at: now,
+    comment_posted_at: now,
+    comment_posted_by: postedBy,
+  });
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/companies/${companyId}/posts`);
+}
+
 export async function unmarkCommentPosted(companyId: string, postId: string) {
   await requireStaff();
 
@@ -109,6 +157,26 @@ export async function unmarkCommentPosted(companyId: string, postId: string) {
   const { error } = await supabase
     .from("posts")
     .update({ comment_posted_at: null, comment_posted_by: null })
+    .eq("id", postId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath(`/companies/${companyId}/posts`);
+}
+
+/** Manually-reported view count on a posted comment — Reddit's API doesn't expose this. */
+export async function setCommentViews(companyId: string, postId: string, formData: FormData) {
+  await requireStaff();
+
+  const raw = String(formData.get("comment_views_count") ?? "").trim();
+  const viewsCount = raw === "" ? null : Number(raw);
+  if (viewsCount !== null && (!Number.isInteger(viewsCount) || viewsCount < 0)) {
+    throw new Error("Views must be a non-negative whole number");
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("posts")
+    .update({ comment_views_count: viewsCount })
     .eq("id", postId);
   if (error) throw new Error(error.message);
 

@@ -417,3 +417,45 @@ alter table public.companies alter column posts_sort set default 'relevance';
 
 alter table public.companies alter column posts_sort set default 'new';
 
+-- ===== 0012_manual_views_metrics.sql =====
+-- Manually-entered "reported views" counters. Reddit's API doesn't expose
+-- view counts, so these are staff-entered numbers surfaced on the company
+-- Overview analytics charts — an explicitly partial/manual metric, not
+-- automatically collected. `comment_views_count` (not a generic
+-- `views_count` on posts) to avoid confusion with `posts.upvotes`, which is
+-- the *original* Reddit post's upvote count captured at ingestion time —
+-- unrelated to views on our own posted reply.
+--
+-- No RLS changes: both columns live on existing tables whose "staff full
+-- access" (ALL) policies already cover UPDATE, and existing client SELECT
+-- policies already expose them for read — RLS is row-level, not column-level.
+
+alter table public.post_generations
+  add column views_count integer,
+  add constraint post_generations_views_count_check
+    check (views_count is null or views_count >= 0);
+
+alter table public.posts
+  add column comment_views_count integer,
+  add constraint posts_comment_views_count_check
+    check (comment_views_count is null or comment_views_count >= 0);
+
+-- ===== 0013_manual_comments.sql =====
+-- Manual comment logging: staff sometimes reply to a Reddit post found
+-- organically (not surfaced by keyword search/ingestion), so there's no
+-- `posts` row to attach the reply to. This lets staff log the link + the
+-- comment text + who posted it directly, so it flows into the same
+-- comment_posted_at/comment_views_count metrics (see 0012 and
+-- lib/analytics/queries.ts) as AI-assisted replies, without the original
+-- post ever needing to be ingested or classified.
+--
+-- `author` and `content` describe the *original* Reddit post, which a
+-- manual entry never has (staff only pastes the link, not the post body) —
+-- both become nullable. `is_manual` flags these rows so the UI can skip the
+-- AI-only fields (status, relevance, reasoning) that never apply to them.
+
+alter table public.posts
+  alter column author drop not null,
+  alter column content drop not null,
+  add column is_manual boolean not null default false;
+

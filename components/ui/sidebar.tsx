@@ -254,7 +254,7 @@ function NavItem({
     >
       <span
         className={cx(
-          "bg-gradient-brand absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-full transition-transform duration-200",
+          "bg-accent absolute top-1/2 left-0 h-4 w-0.5 -translate-y-1/2 rounded-full transition-transform duration-200",
           active ? "scale-y-100" : "scale-y-0",
         )}
         aria-hidden="true"

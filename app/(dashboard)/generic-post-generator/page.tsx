@@ -1,7 +1,7 @@
 import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { EmptyState, PageHeading } from "@/components/ui";
-import { GenerateButton } from "@/components/post-generator/generate-button";
+import { GenerationPanel } from "@/components/post-generator/generation-panel";
 import { PostGenerationCard } from "@/components/post-generator/post-generation-card";
 import { HistoryList } from "@/components/post-generator/history-list";
 import type { PostGenerationRow } from "@/components/post-generator/types";
@@ -25,7 +25,13 @@ export default async function GenericPostGeneratorPage() {
     .order("created_at", { ascending: false })
     .limit(20);
 
-  const posts: PostGenerationRow[] = (data ?? []).map((row) => ({ ...row, persona_display_name: null }));
+  const posts: PostGenerationRow[] = (data ?? []).map((row) => ({
+    ...row,
+    persona_display_name: null,
+    posted_at: null,
+    posted_by_display_name: null,
+    views_count: null,
+  }));
   const [featured, ...history] = posts;
 
   return (
@@ -35,23 +41,25 @@ export default async function GenericPostGeneratorPage() {
         description="Generate authentic Reddit posts with AI. Each one picks a random subreddit and theme, no company or persona targeting."
       />
 
-      {isStaff && <GenerateButton action={generatePost} hasFeatured={Boolean(featured)} />}
-
-      {featured ? (
-        <div className="space-y-6">
-          <PostGenerationCard post={featured} />
-          {isStaff && <HistoryList posts={history} deleteAction={deletePostGeneration} />}
-        </div>
+      {isStaff ? (
+        <GenerationPanel action={generatePost} hasFeatured={Boolean(featured)}>
+          {featured ? (
+            <div className="space-y-6">
+              <PostGenerationCard post={featured} />
+              <HistoryList posts={history} deleteAction={deletePostGeneration} />
+            </div>
+          ) : (
+            <EmptyState
+              icon={Sparkles}
+              title="No posts yet"
+              description='Click "Generate Post" to create your first Reddit post.'
+            />
+          )}
+        </GenerationPanel>
+      ) : featured ? (
+        <PostGenerationCard post={featured} />
       ) : (
-        <EmptyState
-          icon={Sparkles}
-          title="No posts yet"
-          description={
-            isStaff
-              ? 'Click "Generate Post" to create your first Reddit post.'
-              : "No Reddit posts have been generated yet."
-          }
-        />
+        <EmptyState icon={Sparkles} title="No posts yet" description="No Reddit posts have been generated yet." />
       )}
     </div>
   );
