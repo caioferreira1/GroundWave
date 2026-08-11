@@ -24,8 +24,8 @@ export function Logo({ size = 22 }: { size?: number }) {
         />
         <path
           d="M11 24C15 24 16 13.5 21 13.5C26 13.5 24 24 23 24"
-          stroke="var(--accent)"
-          strokeOpacity="0.45"
+          stroke="var(--accent-2)"
+          strokeOpacity="0.6"
           strokeWidth="1.75"
           strokeLinecap="round"
         />

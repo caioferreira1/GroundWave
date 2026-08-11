@@ -1,8 +1,9 @@
 "use client";
 
+import { AlertCircle, Loader2 } from "lucide-react";
 import { useActionState, useState } from "react";
 import { Logo } from "@/components/logo";
-import { Button, Input, Label } from "@/components/ui";
+import { Button, Card, Field, Input, SegmentedControl, SegmentedControlButton } from "@/components/ui";
 import { signIn, signUp, type AuthActionState } from "./actions";
 
 const initialState: AuthActionState = { error: null };
@@ -17,29 +18,44 @@ export default function LoginPage() {
   const pending = mode === "signin" ? signInPending : signUpPending;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg px-4">
-      <div className="w-full max-w-sm">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-bg px-4">
+      <div
+        className="animate-drift pointer-events-none absolute inset-x-0 top-0 h-[36rem] opacity-90"
+        style={{
+          background:
+            "radial-gradient(ellipse at top, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%), radial-gradient(ellipse 40rem 24rem at 80% -10%, color-mix(in srgb, var(--accent-2) 18%, transparent), transparent 65%)",
+        }}
+        aria-hidden="true"
+      />
+
+      <div className="animate-fade-in-up relative w-full max-w-sm">
         <div className="mb-6 flex justify-center">
           <Logo size={26} />
         </div>
 
-        <div className="rounded-lg border border-border bg-surface p-6">
-          <h1 className="mb-1 text-lg font-semibold tracking-tight text-ink">
-            {mode === "signin" ? "Sign in" : "Create account"}
-          </h1>
-          <p className="mb-6 text-sm text-ink-muted">
+        <Card className="rounded-xl p-6 shadow-md">
+          <div className="mb-5 flex justify-center">
+            <SegmentedControl>
+              <SegmentedControlButton type="button" active={mode === "signin"} onClick={() => setMode("signin")}>
+                Sign in
+              </SegmentedControlButton>
+              <SegmentedControlButton type="button" active={mode === "signup"} onClick={() => setMode("signup")}>
+                Sign up
+              </SegmentedControlButton>
+            </SegmentedControl>
+          </div>
+
+          <p className="mb-6 text-center text-sm text-ink-muted">
             {mode === "signin"
               ? "Staff and client access to Reddit monitoring and content generation."
               : "New accounts start pending until an admin approves them."}
           </p>
 
           <form action={action} className="space-y-4">
-            <div>
-              <Label htmlFor="email">Email</Label>
+            <Field label="Email" htmlFor="email">
               <Input id="email" name="email" type="email" required autoComplete="email" />
-            </div>
-            <div>
-              <Label htmlFor="password">Password</Label>
+            </Field>
+            <Field label="Password" htmlFor="password">
               <Input
                 id="password"
                 name="password"
@@ -48,23 +64,21 @@ export default function LoginPage() {
                 minLength={8}
                 autoComplete={mode === "signin" ? "current-password" : "new-password"}
               />
-            </div>
+            </Field>
 
-            {state.error && <p className="text-sm text-critical">{state.error}</p>}
+            {state.error && (
+              <div className="flex items-start gap-2 rounded-md bg-critical-soft px-3 py-2 text-sm text-critical">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{state.error}</span>
+              </div>
+            )}
 
             <Button type="submit" disabled={pending} className="w-full">
-              {pending ? "…" : mode === "signin" ? "Sign in" : "Sign up"}
+              {pending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {mode === "signin" ? "Sign in" : "Sign up"}
             </Button>
           </form>
-
-          <button
-            type="button"
-            onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-            className="mt-5 text-sm text-ink-muted underline underline-offset-2 hover:text-ink"
-          >
-            {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
-          </button>
-        </div>
+        </Card>
       </div>
     </div>
   );

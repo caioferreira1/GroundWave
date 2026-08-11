@@ -1,6 +1,6 @@
-import Link from "next/link";
+import { Building2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Badge, Button, Card, Input, Label, PageHeading } from "@/components/ui";
+import { AddCompanyMenu, CompanyCard, EmptyState, PageHeading } from "@/components/ui";
 import { createCompany } from "./actions";
 
 export default async function CompaniesPage() {
@@ -15,50 +15,29 @@ export default async function CompaniesPage() {
       <PageHeading
         title="Companies"
         description="Each company gets its own Reddit monitoring, personas, and generated content."
+        action={<AddCompanyMenu action={createCompany} />}
       />
 
-      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {(companies ?? []).map((c) => (
-          <li key={c.id}>
-            <Link href={`/companies/${c.id}`}>
-              <Card className="flex items-start gap-3 p-4 transition-colors hover:border-accent">
-                <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent-strong">
-                  {c.name.slice(0, 1).toUpperCase()}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium text-ink">{c.name}</p>
-                  {c.website_url && (
-                    <p className="truncate text-sm text-ink-muted">{c.website_url}</p>
-                  )}
-                  <div className="mt-2">
-                    <Badge variant={c.posts_fetch_enabled ? "good" : "neutral"}>
-                      {c.posts_fetch_enabled ? "Ingestion on" : "Ingestion off"}
-                    </Badge>
-                  </div>
-                </div>
-              </Card>
-            </Link>
-          </li>
-        ))}
-        {(companies ?? []).length === 0 && (
-          <li className="text-sm text-ink-muted">No companies yet — add the first one below.</li>
-        )}
-      </ul>
-
-      <Card className="max-w-sm p-5">
-        <form action={createCompany} className="space-y-4">
-          <h2 className="text-sm font-semibold text-ink">Add a company</h2>
-          <div>
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" name="name" required />
-          </div>
-          <div>
-            <Label htmlFor="website_url">Website (optional)</Label>
-            <Input id="website_url" name="website_url" type="url" placeholder="https://" />
-          </div>
-          <Button type="submit">Create company</Button>
-        </form>
-      </Card>
+      {(companies ?? []).length > 0 ? (
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {(companies ?? []).map((c) => (
+            <li key={c.id}>
+              <CompanyCard
+                id={c.id}
+                name={c.name}
+                websiteUrl={c.website_url}
+                ingestionEnabled={c.posts_fetch_enabled}
+              />
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <EmptyState
+          icon={Building2}
+          title="No companies yet"
+          description="Add your first company above to start monitoring Reddit for relevant conversations."
+        />
+      )}
     </div>
   );
 }

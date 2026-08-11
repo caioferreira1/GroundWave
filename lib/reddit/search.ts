@@ -113,11 +113,15 @@ async function attemptSearch(url: string, apiKey: string): Promise<SearchAttempt
  * sort=top, so recency filtering is left to the caller (use `posted_at`)
  * instead of relying on a server-side time window.
  *
- * `sort` defaults to "relevance" rather than "new" — confirmed live that
- * "new" barely honors the boolean query (mostly unrelated recent posts),
- * while "relevance" reliably returns on-topic matches. The 3-gate AI
- * classifier downstream is what filters out the resulting stale/news-share
- * posts "relevance" tends to surface.
+ * `sort` defaults to "new" rather than "relevance". Confirmed live twice:
+ * "relevance" matches the boolean query strictly but ignores recency
+ * entirely — for a query that's been searchable on Reddit for years, it
+ * surfaces posts from years ago (production feedback: "bons posts, mas
+ * todos antigos"). "new" respects the subreddit scoping and returns fresh
+ * posts (days/weeks old), mixed with off-topic noise — but that noise is
+ * exactly what the 3-gate AI classifier downstream exists to reject, and it
+ * does so correctly. Freshness is the point of a monitoring pipeline;
+ * precision belongs to the classifier, not the search step.
  */
 export async function searchReddit(
   query: string,
@@ -131,7 +135,7 @@ export async function searchReddit(
     .filter(Boolean);
   if (keys.length === 0) throw new Error("RAPIDAPI_KEYS is not configured.");
 
-  const sort = opts?.sort ?? "relevance";
+  const sort = opts?.sort ?? "new";
   const url = `https://${RAPIDAPI_HOST}/getSearchPosts?query=${encodeURIComponent(query)}&sort=${sort}`;
 
   let lastError: Error | null = null;

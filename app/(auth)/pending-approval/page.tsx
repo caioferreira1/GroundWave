@@ -1,7 +1,8 @@
+import { Clock, XCircle } from "lucide-react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/logo";
-import { Badge } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { signOut } from "../login/actions";
 
 export default async function PendingApprovalPage() {
@@ -21,19 +22,32 @@ export default async function PendingApprovalPage() {
   if (profile?.status === "approved") redirect("/companies");
 
   const denied = profile?.status === "denied";
+  const Icon = denied ? XCircle : Clock;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg px-4">
-      <div className="w-full max-w-sm">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-bg px-4">
+      <div
+        className="animate-drift pointer-events-none absolute inset-x-0 top-0 h-[36rem] opacity-90"
+        style={{
+          background:
+            "radial-gradient(ellipse at top, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%), radial-gradient(ellipse 40rem 24rem at 80% -10%, color-mix(in srgb, var(--accent-2) 18%, transparent), transparent 65%)",
+        }}
+        aria-hidden="true"
+      />
+
+      <div className="animate-fade-in-up relative w-full max-w-sm">
         <div className="mb-6 flex justify-center">
           <Logo size={26} />
         </div>
 
-        <div className="rounded-lg border border-border bg-surface p-6 text-center">
-          <div className="mb-3 flex justify-center">
-            <Badge variant={denied ? "critical" : "warning"}>
-              {denied ? "Access denied" : "Pending approval"}
-            </Badge>
+        <Card className="rounded-xl p-6 text-center shadow-md">
+          <div
+            className={
+              "mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-full " +
+              (denied ? "bg-critical-soft" : "bg-warning-soft")
+            }
+          >
+            <Icon className={"h-5 w-5 " + (denied ? "text-critical" : "text-warning")} strokeWidth={1.75} />
           </div>
           <h1 className="mb-2 text-lg font-semibold tracking-tight text-ink">
             {denied ? "This account was denied" : "Waiting on an admin"}
@@ -48,7 +62,7 @@ export default async function PendingApprovalPage() {
               Sign out
             </button>
           </form>
-        </div>
+        </Card>
       </div>
     </div>
   );

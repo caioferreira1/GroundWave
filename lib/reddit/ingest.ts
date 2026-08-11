@@ -3,6 +3,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { classifyPost } from "@/lib/ai/classifier";
 import { buildRedditQuery, searchReddit, type NormalizedRedditPost } from "@/lib/reddit/search";
 
+// sort=new mixes in some off-topic noise alongside fresh posts (see
+// lib/reddit/search.ts) — the AI classifier is what filters that noise for
+// relevance. Recency, on the other hand, has to be enforced here: without
+// this, a post from months/years ago that happens to match would go
+// straight to a human reviewer as if it were something to engage with today.
+const MAX_POST_AGE_MS = 24 * 60 * 60 * 1000;
+
 export type IngestCompany = {
   id: string;
   suggested_subreddits: string[] | null;
@@ -85,12 +92,16 @@ export async function ingestCompanyPosts(
       company.search_keywords ?? [],
       company.suggested_subreddits ?? [],
     );
-    const sort = (company.posts_sort ?? "relevance") as "new" | "top" | "hot" | "relevance";
+    const sort = (company.posts_sort ?? "new") as "new" | "top" | "hot" | "relevance";
     const posts = await searchReddit(query, { sort });
 
     const minUpvotes = company.posts_min_upvotes ?? 2;
     const maxPerRun = company.posts_max_per_run ?? 100;
-    const candidates = posts.filter((p) => p.upvotes >= minUpvotes).slice(0, maxPerRun);
+    const maxAgeCutoff = Date.now() - MAX_POST_AGE_MS;
+    const candidates = posts
+      .filter((p) => p.upvotes >= minUpvotes)
+      .filter((p) => new Date(p.posted_at).getTime() >= maxAgeCutoff)
+      .slice(0, maxPerRun);
 
     const insertedCount = await insertAndClassifyPosts(company.id, candidates);
 

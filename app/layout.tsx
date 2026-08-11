@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({
@@ -25,7 +26,20 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${plexSans.variable} ${plexMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col font-sans">{children}</body>
+      <body className="min-h-full flex flex-col font-sans">
+        {children}
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            classNames: {
+              toast: "!bg-surface !text-ink !border-border !shadow-md",
+              description: "!text-ink-muted",
+              error: "!text-critical",
+              success: "!text-good",
+            },
+          }}
+        />
+      </body>
     </html>
   );
 }

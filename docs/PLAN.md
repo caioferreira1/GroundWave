@@ -21,8 +21,24 @@ trecho abaixo ainda disser o nome antigo, é resquício).*
   abaixo, não precisa revisitar.
 - ✅ **Rebrand + design system aplicado** — ver seção "Marca e design"
   abaixo.
-- ⏭️ **Próximo passo: Fase 2** (ingestão via RapidAPI + classificador de
-  relevância) — ainda não começada.
+- ✅ **Fase 2 completa** (ingestão via RapidAPI + classificador de
+  relevância) — testada de ponta a ponta contra Supabase/RapidAPI/AI gateway
+  reais (empresa MAA). Ver seção própria "Fase 2 — notas de implementação"
+  logo abaixo do Pipeline para detalhes e decisões não óbvias (cota da
+  RapidAPI, `sort` da busca, retry, filtro de janela de 24h). Uma primeira
+  versão desta fase tinha sido implementada em outro computador mas nunca
+  chegou a ser commitada/pushada (problema de credenciais) — foi refeita do
+  zero nesta sessão.
+- ✅ **Fase 3 implementada** (personas + resposta persona-aware) — script de
+  import, UI de personas, gerador de resposta persona-aware, rascunho
+  editável, marcar/desmarcar como postado. `generateReply()` testado de
+  ponta a ponta contra Supabase/AI gateway reais; os cliques de UI (botões,
+  toggle) ainda não foram testados no navegador por falta de login — ver
+  ressalva na seção "Verificação" mais abaixo. Ver "Fase 3 — notas de
+  implementação" abaixo pros detalhes não óbvios (idioma da resposta,
+  anti-impersonation, fallback sem persona).
+- ⏭️ **Próximo passo: Fase 4** (geração de posts originais, modo
+  genérico/empresa) — ainda não começada.
 - Detalhes completos de infra (URLs, IDs de projeto) na seção "Infra em
   produção" mais abaixo. Segredos (chaves, senhas, tokens) não ficam neste
   arquivo nem em memória — estão só em `.env.local` (local) e nas env vars da
@@ -103,18 +119,21 @@ input de usuário sem checagem de staff antes.
 app/
   (auth)/login/  (auth)/pending-approval/
   (dashboard)/
-    companies/[companyId]/{overview,settings,personas,posts,post-generator}/
-    generic-post-generator/
+    companies/[companyId]/layout.tsx          # tab bar: Overview/Settings/Posts
+    companies/[companyId]/page.tsx            # overview (status cards)
+    companies/[companyId]/settings/{page,actions}.tsx
+    companies/[companyId]/posts/{page,actions}.tsx
+    generic-post-generator/                   # ainda não existe (Fase 4)
     admin/users/
   api/cron/reddit-ingest/route.ts      # Vercel Cron
   api/webhooks/posts/route.ts          # ingestão externa (Zapier/Make/n8n)
 lib/
-  supabase/{server.ts, admin.ts}
-  ai/{gateway.ts, classifier.ts, reply-generator.ts, post-generator.ts}
+  supabase/{server.ts, admin.ts, types.ts}
+  ai/{gateway.ts, classifier.ts}             # reply-generator/post-generator: Fase 3/4
   reddit/{search.ts, ingest.ts}
-  personas.ts, auth.ts
-scripts/import-personas.ts
-supabase/migrations/0001..0009*.sql   (ver nomes reais na pasta — seção abaixo)
+  auth.ts                                     # personas.ts: Fase 3
+scripts/import-personas.ts                    # ainda não existe (Fase 3)
+supabase/migrations/0001..0011*.sql   (ver nomes reais na pasta — seção abaixo)
 vercel.json
 ```
 
@@ -175,6 +194,14 @@ testar: o `CASE WHEN` do trigger `handle_new_user` (migration 0002) não tinha
 cast explícito pro enum `account_status`, quebrando todo signup com
 "Database error creating new user". Corrigido com casts explícitos.
 
+`0010_default_posts_sort_relevance.sql` + `0011_revert_posts_sort_default_new.sql`
+— ida e volta do `default` de `companies.posts_sort` durante a Fase 2, as
+duas aplicadas (nenhuma foi editada depois de rodada — sempre nova migration
+pra corrigir, nunca mexer numa já aplicada). Ver "Fase 2 — notas de
+implementação" abaixo pro porquê: `relevance` parecia melhor num teste
+isolado, mas em uso real trouxe posts de anos atrás; `new` (o valor final)
+é o que fica.
+
 RLS em todas: staff (`is_staff()`) acesso total; clientes leitura via
 `can_access_company()`. Padrão idêntico ao já validado no app de referência.
 
@@ -215,15 +242,112 @@ persona — praticamente igual ao que já existe hoje) e por empresa (subreddit
 sugerido da empresa, persona + guardrails igual ao fluxo de resposta). Grava
 em `post_generations` com `mode` e `company_id` nullable.
 
+## Fase 2 — notas de implementação (RapidAPI, o que aprendemos testando de verdade)
+
+Implementada e testada de ponta a ponta nesta sessão (empresa MAA, chaves
+reais). Decisões que não são óbvias só lendo o código:
+
+- **Cota da RapidAPI é pequena**: plano BASIC do `reddit34` = **50
+  requisições/mês por chave**, reseta mensalmente. `RAPIDAPI_KEYS` em
+  `.env.local`/Vercel é uma **lista separada por vírgula** (não uma chave
+  só) — `lib/reddit/search.ts::searchReddit()` tenta a próxima automaticamente
+  quando uma bate 429/"exceeded the MONTHLY quota". Sempre manter mais de
+  uma chave configurada.
+- **A API é flaky**: a mesma query, sem mudar nada, às vezes responde
+  `{success:false, data:"data not found"}` e funciona segundos depois no
+  retry — confirmado ao vivo (3 tentativas seguidas: falhou, falhou, ok).
+  `searchReddit()` tenta até 3x por chave (1.5s de intervalo) antes de
+  cair pra próxima chave ou desistir.
+- **Query longa demais (muitos keywords + subreddits combinados) retorna 0
+  resultados silenciosamente** (não é erro, é uma resposta válida vazia).
+  Reproduzido: 10 keywords + 10 subreddits funciona, 15+10 não.
+  `buildRedditQuery()` corta subreddits do fim da lista até a query caber
+  em `MAX_QUERY_CHARS` (480) — keywords nunca são cortadas porque busca
+  só-com-keyword já provou funcionar sozinha.
+- **`sort` da busca: `new`, não `relevance`** (migrations 0010→0011 foram
+  essa ida e volta). `relevance` bate a query com precisão mas ignora data
+  — trouxe posts de 2017-2022 numa busca de 2026. `new` respeita o filtro
+  de subreddit e traz posts recentes (dias/semanas), misturado com ruído
+  fora do tópico — mas esse ruído é exatamente o que o classificador de 3
+  gates já rejeita corretamente. Não usar `relevance` como default de novo
+  sem repensar isso.
+- **Filtro de janela de 24h** em `lib/reddit/ingest.ts::ingestCompanyPosts()`
+  (constante `MAX_POST_AGE_MS`): mesmo com `sort=new`, um post que "match"
+  mas é antigo é descartado antes de virar candidato — só entra post
+  postado nas últimas 24h. Isso é reforço além do `sort`, não substituto.
+  Só se aplica ao caminho da busca RapidAPI; o webhook não filtra por idade
+  (automação externa pode legitimamente mandar um post específico).
+- **Webhook autenticado por `?token=` na query string** (não header) —
+  pensado pra colar a URL inteira direto no Zapier/Make/n8n. Token é por
+  empresa (`companies.inbound_webhook_token`), com botão de regenerar na
+  Settings.
+- **Classificador usa `callAiGateway()`** (`lib/ai/gateway.ts`, já existia
+  da Fase 1) em vez de `fetch` direto ao Lovable — isso já dá o modo proxy
+  do Passo 0 de graça, sem código extra.
+- **Data mostrada na lista de Posts é `posted_at`** (quando o post foi feito
+  no Reddit), não `received_at` (quando entrou no nosso banco) — pedido
+  explícito, porque o objetivo é engajar em posts novos, não só ver quando
+  processamos.
+- **"Run ingestion now"** na Settings roda o mesmo `ingestCompanyPosts()` do
+  cron mas com `scheduled:false` (não mexe em `posts_fetch_frequency_hours`/
+  `posts_last_scheduled_run_at`) — é o jeito rápido de testar sem esperar o
+  cron nem montar `curl` com `CRON_SECRET`.
+
 ## Import das personas
 
-`scripts/import-personas.ts` (script único, não faz parte do runtime do app),
-roda com `--company-id <uuid-da-maa> --dir <pasta personas/>`: lê cada `.md`
-com `gray-matter`, `slug` do frontmatter vira coluna, corpo inteiro vira
-`content_md`, `baseada_em` vira `based_on_fichas` (só rastreabilidade). Upsert
-por `(company_id, slug)`, então pode rodar de novo com segurança depois de
-editar os `.md` de origem. Usa o client admin (service role) — script de
-operador, não fica exposto no app.
+`scripts/import-personas.ts` (script único, não faz parte do runtime do app;
+rodar via `npm run import-personas -- --company-id <uuid> --dir <pasta>`):
+lê cada `.md` com `gray-matter`, `slug` do frontmatter vira coluna, corpo
+inteiro vira `content_md`, `baseada_em` vira `based_on_fichas` (só
+rastreabilidade). Upsert por `(company_id, slug)`, então pode rodar de novo
+com segurança depois de editar os `.md` de origem — atualiza `content_md`/
+`based_on_fichas` mas nunca sobrescreve `display_name` nem `is_active` numa
+persona já existente, pra não reverter edições feitas na UI (nome
+customizado, persona desativada manualmente). Cria um client Supabase
+próprio em vez de importar `lib/supabase/admin.ts`: esse módulo (e tudo que
+ele importa, como `lib/ai/gateway.ts`) é marcado `"server-only"`, que lança
+erro fora da condição de bundler `react-server` do Next — exatamente o caso
+de rodar via `tsx` puro. Carrega `.env.local` com `process.loadEnvFile()`
+(Node ≥20.6, sem dependência nova). Os `.md` de origem não têm campo de nome
+no frontmatter, então `display_name` é derivado do `slug` (title-case) na
+criação — dá pra ajustar depois na aba Personas se ficar estranho.
+
+## Fase 3 — notas de implementação (gerador de resposta persona-aware)
+
+`lib/ai/reply-generator.ts::generateReply()` — mesmo padrão de
+`classifier.ts` (client admin, escreve direto em `posts`, chamado a partir de
+uma Server Action que já checou `requireStaff()`). Decisões que não são
+óbvias só lendo o código:
+
+- **Resposta sempre em inglês, mesmo as personas sendo em português**: os
+  posts ingeridos são de subreddits em inglês (`r/medicalschool`,
+  `r/Residency`, confirmado inspecionando posts reais da MAA) e o
+  `companies.profile` da MAA também é em inglês — mas as personas em
+  `MAA-personas/` são material interno em português. O prompt instrui
+  explicitamente que o material de referência pode estar em português mas a
+  saída tem que ser em inglês.
+- **As personas calibram tom, não decidem se aparecem**: ao contrário do
+  gerador de comentário do app de referência (que decide se cita ou não o
+  produto da empresa), aqui a IA nunca afirma pertencer ao segmento de
+  audiência — o prompt inclui uma regra anti-impersonation explícita,
+  espelhando a seção "Guardrails" que já vem em cada persona `.md` ("nunca
+  usá-la como identidade fake pra se passar por aluno real").
+- **Catálogo de personas no prompt é truncado** às seções Resumo + Voz e
+  vocabulário + Exemplos de linguagem (via regex simples em `## Heading`) —
+  Dores/Objeções/Gatilhos são psicologia de marketing que não muda a escolha
+  de palavras, incluir tudo só infla o prompt sem ajudar a escrita.
+- **Sem persona ativa não bloqueia a geração** — empresa sem personas
+  importadas ainda recebe resposta (só sem calibração de voz), pra não
+  travar o fluxo principal antes do import rodar.
+- **Override manual pula a etapa de escolha** — se o staff já selecionou uma
+  persona no `<Select>` da página de Posts, o prompt nem lista as outras,
+  só usa a escolhida.
+- **"Marcar como postado" é sempre o próprio staff que clicou**, sem
+  seletor de usuário (diferente do app de referência, que deixava escolher
+  qualquer staff) — mais simples e não há caso de uso real pra postar em
+  nome de outra pessoa aqui.
+- Mesmo pós-processamento do app de referência: remove hífens/travessões
+  residuais que o modelo às vezes cola apesar da regra.
 
 ## Autenticação e aprovação de staff
 
@@ -240,15 +364,18 @@ empresas/personas e a ação de marcar como postado.
   integration — todo push em `main` dispara deploy automático.
 - Vercel: projeto `groundwave/maa-reddit-app`, env vars de produção/preview já
   configuradas (Supabase, AI proxy, `RAPIDAPI_HOST`, `CRON_SECRET`). URL:
-  `https://maa-reddit-app.vercel.app`.
+  `https://maa-reddit-app.vercel.app`. **Confirmar que `RAPIDAPI_KEYS`
+  (plural, separado por vírgula — ver Fase 2) também está setado lá**, não
+  só localmente.
 - **Limitação do plano Hobby**: cron só roda 1x/dia (`vercel.json` ajustado
   para `17 9 * * *`). Isso significa que `posts_fetch_frequency_hours` abaixo
   de 24h (as opções de 6h/12h que a UI de configurações vai oferecer, cf.
   app de referência) não vão de fato rodar mais que uma vez ao dia até fazer
   upgrade pro plano Pro. Não bloqueia nada agora, só vale saber.
 - Supabase: projeto próprio (ref `xmfmouontuvegtkwwhbw`), migrations
-  0001-0009 aplicadas (0009 corrige um bug real no trigger `handle_new_user` —
-  `CASE WHEN` sem cast para o enum `account_status` quebrava todo signup).
+  0001-0011 aplicadas (0009 corrige um bug real no trigger `handle_new_user` —
+  `CASE WHEN` sem cast para o enum `account_status` quebrava todo signup;
+  0010/0011 são a ida e volta do default de `posts_sort`, ver Fase 2).
 
 ## Marca e design (aplicado)
 
@@ -282,14 +409,23 @@ system de verdade em vez de estilo neutro genérico:
    de `company.functions.ts` do app de referência) **ainda não foram
    portados** — só o CRUD simples (nome/site) existe hoje. Entrega atual: dá
    pra logar, aprovar staff, cadastrar empresas manualmente.
-2. **Ingestão + classificador** (próximo passo) — migrations 0006-0007, adaptador RapidAPI,
-   rota de cron + webhook, classificador, lista de posts com filtros e
-   correção humana. Entrega: posts da MAA chegam e são classificados.
-3. **Personas + resposta persona-aware** — migration 0004 + script de import,
-   UI de personas, gerador de resposta, fluxo de revisão/aprovação. Entrega: o
+2. ✅ **Ingestão + classificador** (completa) — adaptador RapidAPI
+   (`lib/reddit/search.ts`), rota de cron + webhook, classificador de 3
+   gates, Settings (config de busca + perfil/guardrails + webhook +
+   "Run ingestion now") e Posts (lista com filtros + correção humana) na UI
+   de cada empresa. Entrega: posts da MAA chegam, são classificados, e
+   staff corrige manualmente quando o classificador erra. Ver "Fase 2 —
+   notas de implementação" acima pros detalhes que não são óbvios (cota da
+   RapidAPI, flakiness, `sort`, filtro de 24h).
+3. ✅ **Personas + resposta persona-aware** (completa) — migration 0005 (já
+   aplicada) + `scripts/import-personas.ts`, aba Personas por empresa
+   (`lib/ai/reply-generator.ts` + tab "Personas"), gerador de resposta,
+   rascunho editável + marcar/desmarcar como postado em Posts. Entrega: o
    fluxo principal ponta a ponta (post relevante → rascunho na voz certa →
-   revisão humana → marcado como postado).
-4. **Geração de posts** — migration 0007, os dois modos, UI de criação.
+   revisão humana → marcado como postado). Ver "Fase 3 — notas de
+   implementação" logo abaixo da seção "Import das personas" pros detalhes
+   que não são óbvios.
+4. **Geração de posts** — migration 0008 (já aplicada), os dois modos, UI de criação.
 5. **Polimento (depois)** — notificações, dashboards/analytics (o app de
    referência tem gráficos de SLA/tendência que podem ser portados depois),
    credenciais de API por empresa, segunda empresa-piloto além da MAA.
@@ -300,13 +436,28 @@ system de verdade em vez de estilo neutro genérico:
   nada do resto funciona, é o primeiro checkpoint real.
 - Fase 1: criar conta, confirmar que fica `pending`, aprovar via
   `caiomorgz@gmail.com` (admin bootstrap), criar a empresa MAA.
-- Fase 2: rodar a rota de cron manualmente (ou o webhook com um post de
-  teste) e conferir no Supabase que a linha aparece em `posts` com
-  `ai_status='processed'` e `relevance_score` preenchido.
-- Fase 3: rodar o script de import, conferir 4 personas na tabela; gerar uma
-  resposta para um post relevante da MAA e conferir que o rascunho reflete a
-  voz de uma das personas e que `generated_comment_persona_id` foi
-  preenchido; testar também o override manual de persona.
+- Fase 2: ✅ feito — "Run ingestion now" e o webhook (`curl` com post de
+  teste) confirmados na MAA, `posts` chegando com `ai_status='processed'` e
+  `relevance_score` preenchido, correção humana gravando em
+  `classifier_examples`.
+- Fase 3: parcialmente verificado nesta sessão — script de import rodado
+  contra o Supabase real da MAA (4 personas confirmadas na tabela, reimport
+  confirmado idempotente); `generateReply()` testado de ponta a ponta contra
+  o AI gateway e o Supabase reais (via rota de debug temporária chamada com
+  `curl`, depois removida) tanto em modo auto (escolheu
+  `estudante-construindo-curriculo-do-zero` para um post real de calouro de
+  medicina sem experiência de pesquisa — persona coerente com o post) quanto
+  com override manual de persona; nos dois casos o texto saiu em inglês, sem
+  hífen/travessão, e as colunas `generated_comment*` gravaram certo no
+  Supabase. **Não verificado ainda**: os cliques de UI em si (botão
+  "Generate reply"/"Regenerate", salvar edição do rascunho, marcar/desmarcar
+  como postado, toggle de `is_active` na aba Personas) — não consegui logar
+  no app (sem a senha do admin) para testar pelo navegador. Essas ações são
+  Server Actions simples (leem `FormData`, um `update` no Supabase,
+  `revalidatePath`) no mesmo padrão de `setHumanVerdict`/
+  `updateCompanySettings` já validados nas Fases 1/2, e `npm run build`
+  type-checou todo o JSX das páginas novas, mas ainda vale um teste manual
+  no navegador antes de considerar 100% fechado.
 - Fase 4: gerar um post no modo genérico e um no modo empresa, conferir
   `post_generations` com `mode`/`company_id`/`persona_id` corretos.
 

@@ -1,9 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-
-const tabLinkClass =
-  "rounded-t-md border-b-2 border-transparent px-3 py-2 text-sm font-medium text-ink-muted transition-colors hover:text-ink";
+import { Avatar } from "@/components/ui/avatar";
+import { CompanyTabs } from "@/components/ui/company-tabs";
 
 export default async function CompanyLayout({
   children,
@@ -24,27 +23,24 @@ export default async function CompanyLayout({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-accent-soft text-base font-semibold text-accent-strong">
-          {company.name.slice(0, 1).toUpperCase()}
-        </div>
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight text-ink">{company.name}</h1>
-          {company.website_url && <p className="text-sm text-ink-muted">{company.website_url}</p>}
+      <div className="flex items-center gap-2.5">
+        <Avatar name={company.name} size="sm" />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold text-ink">{company.name}</p>
+          {company.website_url && (
+            <Link
+              href={company.website_url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-ink-muted hover:text-accent hover:underline"
+            >
+              Link
+            </Link>
+          )}
         </div>
       </div>
 
-      <nav className="flex gap-1 border-b border-border">
-        <Link href={`/companies/${companyId}`} className={tabLinkClass}>
-          Overview
-        </Link>
-        <Link href={`/companies/${companyId}/settings`} className={tabLinkClass}>
-          Settings
-        </Link>
-        <Link href={`/companies/${companyId}/posts`} className={tabLinkClass}>
-          Posts
-        </Link>
-      </nav>
+      <CompanyTabs companyId={companyId} />
 
       {children}
     </div>
