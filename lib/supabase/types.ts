@@ -94,7 +94,7 @@ export type Database = {
           company_id: string | null;
           run_id: string;
           dataset_id: string | null;
-          status: "SUCCEEDED" | "FAILED" | "ABORTED" | "TIMED-OUT" | "TIMEOUT_CLIENT";
+          status: "RUNNING" | "SUCCEEDED" | "FAILED" | "ABORTED" | "TIMED-OUT" | "TIMEOUT_CLIENT";
           cost_usd: number;
           compute_units: number;
           item_count: number;
@@ -107,7 +107,7 @@ export type Database = {
         };
         Insert: Partial<Database["public"]["Tables"]["apify_runs"]["Row"]> & {
           run_id: string;
-          status: "SUCCEEDED" | "FAILED" | "ABORTED" | "TIMED-OUT" | "TIMEOUT_CLIENT";
+          status: "RUNNING" | "SUCCEEDED" | "FAILED" | "ABORTED" | "TIMED-OUT" | "TIMEOUT_CLIENT";
           started_at: string;
         };
         Update: Partial<Database["public"]["Tables"]["apify_runs"]["Row"]>;

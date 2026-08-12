@@ -3,7 +3,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { classifyPost } from "@/lib/ai/classifier";
 import {
   ApifyRunError,
-  runRedditSearch,
+  parseRunResult,
+  startRedditRun,
+  type ApifyRunResource,
   type ApifyRunStats,
   type ApifySort,
   type ApifyTimeWindow,
@@ -38,6 +40,19 @@ export type IngestCompany = {
   posts_max_per_run?: number | null;
   posts_time_window?: string | null;
 };
+
+const INGEST_COMPANY_COLUMNS =
+  "id, suggested_subreddits, search_keywords, posts_min_upvotes, posts_sort, posts_time_window, posts_max_per_run";
+
+export async function loadIngestCompany(companyId: string): Promise<IngestCompany | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("companies")
+    .select(INGEST_COMPANY_COLUMNS)
+    .eq("id", companyId)
+    .maybeSingle();
+  return data as IngestCompany | null;
+}
 
 /**
  * Dedupes `candidates` against existing posts for the company (unique on
@@ -95,60 +110,131 @@ export async function insertAndClassifyPosts(
   return inserted?.length ?? 0;
 }
 
-/** Persists one `apify_runs` row. Skipped entirely when no real run happened. */
-async function recordApifyRun(
-  companyId: string,
-  run: ApifyRunStats,
-  opts: { scheduled: boolean; error?: string },
-): Promise<void> {
-  if (!run.runId) return; // emptyRunStats() — company had no keywords/subreddits configured
+type ApifyRunRowStatus = "RUNNING" | "SUCCEEDED" | "FAILED" | "ABORTED" | "TIMED-OUT" | "TIMEOUT_CLIENT";
 
+type ApifyRunRowPatch = {
+  dataset_id: string | null;
+  status: ApifyRunRowStatus;
+  cost_usd: number;
+  compute_units: number;
+  item_count: number;
+  run_time_secs: number;
+  error: string | null;
+  finished_at: string | null;
+};
+
+async function updateApifyRun(runId: string, patch: ApifyRunRowPatch): Promise<void> {
   const admin = createAdminClient();
-  await admin.from("apify_runs").insert({
-    company_id: companyId,
-    run_id: run.runId,
+  await admin.from("apify_runs").update(patch).eq("run_id", runId);
+}
+
+function statsToRowPatch(run: ApifyRunStats, error: string | null): ApifyRunRowPatch {
+  return {
     dataset_id: run.datasetId,
-    // By the time runId is non-empty, status is always one of the terminal
-    // Apify statuses or our own "TIMEOUT_CLIENT" — never the placeholder
-    // "SKIPPED" from emptyRunStats(), which returns above before this point.
-    status: run.status as "SUCCEEDED" | "FAILED" | "ABORTED" | "TIMED-OUT" | "TIMEOUT_CLIENT",
+    status: run.status as ApifyRunRowStatus,
     cost_usd: run.costUsd,
     compute_units: run.computeUnits,
     item_count: run.itemCount,
     run_time_secs: run.runTimeSecs,
-    scheduled: opts.scheduled,
-    error: opts.error ?? null,
-    started_at: run.startedAt,
+    error,
     finished_at: run.finishedAt,
-  });
+  };
 }
 
 /**
- * Runs the Reddit search for one company and ingests new posts. Returns how
- * many new posts were ingested. `posts_last_fetched_at`/`posts_last_error`
- * are stamped either way so the company overview reflects the last attempt;
- * `posts_last_scheduled_run_at` (which gates the cron "due" check) is only
- * stamped on success, so a failed scheduled run gets retried next tick
- * instead of silently skipping its slot.
+ * Starts an Apify run for one company (fire-and-forget — does NOT wait for
+ * it to finish; a real run can take several minutes) and records a
+ * `RUNNING` row in `apify_runs`. The actual posts/cost land later, when
+ * Apify calls `webhookUrl` and `completeCompanyIngestion` below runs.
+ *
+ * `webhookUrl` must be publicly reachable (Apify can't call back into
+ * localhost) — callers build it from the incoming request's host.
+ *
+ * `posts_last_scheduled_run_at` (which gates the cron "due" check) is
+ * stamped here, at dispatch, not at completion — it marks the schedule
+ * slot as consumed regardless of how long the run itself takes.
  */
-export async function ingestCompanyPosts(
+export async function dispatchCompanyIngestion(
   company: IngestCompany,
+  webhookUrl: string,
   opts?: { scheduled?: boolean },
-): Promise<number> {
+): Promise<{ runId: string } | { skipped: true }> {
   const admin = createAdminClient();
   const now = new Date().toISOString();
   const scheduled = opts?.scheduled ?? false;
-  const timeWindow = (company.posts_time_window ?? "day") as ApifyTimeWindow;
 
   try {
-    const { posts, run } = await runRedditSearch({
-      keywords: company.search_keywords ?? [],
-      subreddits: company.suggested_subreddits ?? [],
-      maxPosts: company.posts_max_per_run ?? 100,
-      time: timeWindow,
-      sort: (company.posts_sort ?? "new") as ApifySort,
-    });
+    const started = await startRedditRun(
+      {
+        keywords: company.search_keywords ?? [],
+        subreddits: company.suggested_subreddits ?? [],
+        maxPosts: company.posts_max_per_run ?? 100,
+        time: (company.posts_time_window ?? "day") as ApifyTimeWindow,
+        sort: (company.posts_sort ?? "new") as ApifySort,
+      },
+      webhookUrl,
+    );
 
+    if (!started) {
+      // No keywords/subreddits configured — nothing to search, no run to wait on.
+      await admin
+        .from("companies")
+        .update({
+          posts_last_fetched_at: now,
+          posts_last_error: null,
+          posts_last_error_at: null,
+          ...(scheduled ? { posts_last_scheduled_run_at: now } : {}),
+        })
+        .eq("id", company.id);
+      return { skipped: true };
+    }
+
+    const { error: insertError } = await admin.from("apify_runs").insert({
+      company_id: company.id,
+      run_id: started.runId,
+      status: "RUNNING" as ApifyRunRowStatus,
+      scheduled,
+      started_at: started.startedAt,
+    });
+    if (insertError) {
+      // The Apify run is already live at this point (real cost/credits
+      // spent) but untracked — its webhook will arrive to an unknown
+      // run_id and be dropped. Surface loudly rather than losing it silently.
+      throw new Error(`Apify run ${started.runId} started but failed to record in apify_runs: ${insertError.message}`);
+    }
+
+    if (scheduled) {
+      await admin.from("companies").update({ posts_last_scheduled_run_at: now }).eq("id", company.id);
+    }
+
+    return { runId: started.runId };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await admin
+      .from("companies")
+      .update({ posts_last_fetched_at: now, posts_last_error: message, posts_last_error_at: now })
+      .eq("id", company.id);
+    throw err;
+  }
+}
+
+/**
+ * Called from the Apify webhook once a dispatched run reaches a terminal
+ * state. Loads the company's current filter settings fresh (they may have
+ * changed since dispatch), fetches + filters + ingests the posts, and
+ * updates both the `apify_runs` row and the company's last-fetch bookkeeping.
+ */
+export async function completeCompanyIngestion(companyId: string, resource: ApifyRunResource): Promise<void> {
+  const admin = createAdminClient();
+  const now = new Date().toISOString();
+
+  const company = await loadIngestCompany(companyId);
+  if (!company) return; // company deleted between dispatch and completion
+
+  try {
+    const { posts, run } = await parseRunResult(resource);
+
+    const timeWindow = (company.posts_time_window ?? "day") as ApifyTimeWindow;
     const minUpvotes = company.posts_min_upvotes ?? 2;
     const maxPerRun = company.posts_max_per_run ?? 100;
     const maxAgeCutoff = timeWindowCutoffMs(timeWindow);
@@ -160,29 +246,21 @@ export async function ingestCompanyPosts(
       .filter((p) => maxAgeCutoff === null || new Date(p.posted_at).getTime() >= maxAgeCutoff)
       .slice(0, maxPerRun);
 
-    const insertedCount = await insertAndClassifyPosts(company.id, candidates);
-    await recordApifyRun(company.id, run, { scheduled });
+    await insertAndClassifyPosts(companyId, candidates);
+    await updateApifyRun(run.runId, statsToRowPatch(run, null));
 
     await admin
       .from("companies")
-      .update({
-        posts_last_fetched_at: now,
-        posts_last_error: null,
-        posts_last_error_at: null,
-        ...(scheduled ? { posts_last_scheduled_run_at: now } : {}),
-      })
-      .eq("id", company.id);
-
-    return insertedCount;
+      .update({ posts_last_fetched_at: now, posts_last_error: null, posts_last_error_at: null })
+      .eq("id", companyId);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (err instanceof ApifyRunError) {
-      await recordApifyRun(company.id, err.stats, { scheduled, error: message });
+      await updateApifyRun(err.stats.runId, statsToRowPatch(err.stats, message));
     }
     await admin
       .from("companies")
       .update({ posts_last_fetched_at: now, posts_last_error: message, posts_last_error_at: now })
-      .eq("id", company.id);
-    throw err;
+      .eq("id", companyId);
   }
 }

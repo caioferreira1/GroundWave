@@ -1,10 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ingestCompanyPosts, type IngestCompany } from "@/lib/reddit/ingest";
-
-// Each due company runs an Apify actor synchronously (start -> poll -> fetch
-// dataset) inside this request; give it room to finish. Requires Fluid
-// Compute on the Vercel project to actually honor durations past 60s.
-export const maxDuration = 300;
+import { dispatchCompanyIngestion, type IngestCompany } from "@/lib/reddit/ingest";
 
 /**
  * Vercel Cron entry point (see vercel.json). Vercel sends
@@ -12,10 +7,12 @@ export const maxDuration = 300;
  * configured on the project; also callable by hand with the same header for
  * manual testing. For each company whose configured fetch frequency has
  * elapsed (and, for daily-or-slower schedules, whose configured hour of day
- * matches the current UTC hour), searches Reddit (via Apify) and ingests new
- * posts. Companies run concurrently — each one's Apify run/poll can already
- * take tens of seconds on its own, so running them sequentially would sum
- * their wall-clock time and risk hitting the function's duration ceiling.
+ * matches the current UTC hour), DISPATCHES an Apify run and returns — it
+ * does not wait for the run to finish (a real run has been measured at
+ * ~4min, too long to hold this request open). Apify calls back
+ * app/api/webhooks/apify-run-complete once each run is done, which is where
+ * posts actually get ingested/classified. No Fluid Compute dependency here:
+ * dispatching is just a couple of fast HTTP calls per company.
  */
 export async function GET(request: Request) {
   const cronSecret = process.env.CRON_SECRET;
@@ -23,6 +20,12 @@ export async function GET(request: Request) {
   if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return new Response("Unauthorized", { status: 401 });
   }
+
+  const webhookSecret = process.env.APIFY_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    return Response.json({ error: "APIFY_WEBHOOK_SECRET is not configured." }, { status: 500 });
+  }
+  const webhookUrl = `${new URL(request.url).origin}/api/webhooks/apify-run-complete?secret=${encodeURIComponent(webhookSecret)}`;
 
   const admin = createAdminClient();
   const { data: companies, error } = await admin
@@ -58,15 +61,15 @@ export async function GET(request: Request) {
   });
 
   const settled = await Promise.allSettled(
-    due.map((company) => ingestCompanyPosts(company as IngestCompany, { scheduled: true })),
+    due.map((company) => dispatchCompanyIngestion(company as IngestCompany, webhookUrl, { scheduled: true })),
   );
   const results = due.map((company, i) => {
     const r = settled[i];
-    if (r.status === "fulfilled") return { company_id: company.id, fetched: r.value };
+    if (r.status === "fulfilled") return { company_id: company.id, dispatched: r.value };
     console.error("[cron/reddit-ingest] company failed", company.id, r.reason);
     return {
       company_id: company.id,
-      fetched: 0,
+      dispatched: false,
       error: r.reason instanceof Error ? r.reason.message : String(r.reason),
     };
   });

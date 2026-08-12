@@ -83,14 +83,26 @@ trecho abaixo ainda disser o nome antigo, é resquício).*
   provedor por completo (`lib/reddit/apify.ts`, actor `harshmaur/reddit-scraper`),
   substituindo a RapidAPI (`reddit34.p.rapidapi.com`) do fim ao fim: cron,
   webhook (só o import mudou), e "Run ingestion now". Nova tabela
-  `apify_runs` (migration 0014) + campo `posts_time_window` na Settings. Ver
-  item 6 em "Fases de construção" e "Fase 6 — notas de implementação" pros
-  detalhes. **Pendente de configuração manual do usuário antes do próximo
-  deploy**: `APIFY_TOKEN` em `.env.local` e na Vercel (substituindo
-  `RAPIDAPI_HOST`/`RAPIDAPI_KEYS`), migration 0014 aplicada via SQL Editor,
-  e confirmar se Fluid Compute está habilitado no projeto Vercel (necessário
-  pro cron/"Run ingestion now" síncronos não estourarem o teto de duração —
-  ver "Infra em produção").
+  `apify_runs` (migrations 0014/0015) + campo `posts_time_window` na
+  Settings. Testada de ponta a ponta contra a Apify real (empresa MAA): 2
+  posts novos ingeridos e classificados, custo do run gravado ($0.028), uso
+  mensal da conta lido ($0.24/$5.00). **Redesenhada pra ser assíncrona**
+  ainda nesta sessão: um run real mediu **~4 minutos** (5 keywords × 5
+  subreddits), tempo demais/variável pra segurar uma function da Vercel
+  esperando — cron e "Run ingestion now" agora só DISPARAM o run (via
+  webhook ad-hoc do Apify) e devolvem na hora; um novo endpoint
+  (`api/webhooks/apify-run-complete`) recebe o aviso da Apify quando o run
+  termina (minutos depois) e só aí busca os posts/classifica/salva. Sem
+  teto de tempo prático e sem depender de Fluid Compute (nenhuma rota
+  precisa segurar mais que alguns segundos). Ver item 6 em "Fases de
+  construção" e "Fase 6 — notas de implementação" pros detalhes. **Pendente
+  de configuração manual do usuário antes do próximo deploy**: `APIFY_TOKEN`
+  + `APIFY_WEBHOOK_SECRET` em `.env.local` (já feito localmente) e na
+  Vercel (substituindo `RAPIDAPI_HOST`/`RAPIDAPI_KEYS`), migrations
+  0014+0015 aplicadas via SQL Editor (0014 já aplicada pelo usuário; 0015
+  ainda não). **O round-trip completo do webhook só dá pra testar contra a
+  app deployada** — Apify não alcança `localhost`, então a verificação local
+  desta sessão cobriu só o disparo do run, não o retorno via webhook.
 - Detalhes completos de infra (URLs, IDs de projeto) na seção "Infra em
   produção" mais abaixo. Segredos (chaves, senhas, tokens) não ficam neste
   arquivo nem em memória — estão só em `.env.local` (local) e nas env vars da
@@ -274,15 +286,24 @@ RLS em todas: staff (`is_staff()`) acesso total; clientes leitura via
 e disparam o classificador:
 - Cron da Vercel (`vercel.json`, `17 9 * * *` — 1x/dia, limite do plano
   Hobby, ver seção "Infra em produção") → `api/cron/reddit-ingest` →
-  filtra empresas cuja `posts_fetch_frequency_hours` já venceu (porta a lógica
-  de `reddit-search-run.ts` do app de referência) → busca no Reddit via Apify
-  (actor `harshmaur/reddit-scraper`, `lib/reddit/apify.ts`, ver "Fase 6 —
-  notas de implementação") usando `search_keywords` + `suggested_subreddits`
-  + `posts_time_window` da empresa. Empresas devidas rodam em paralelo
-  (`Promise.allSettled`), não sequencialmente.
-- Webhook `api/webhooks/posts` para automações externas — autenticado por
-  `inbound_webhook_token` **por empresa** (não um segredo global), mostrado na
-  página de configurações de cada empresa com botão de regenerar.
+  filtra empresas cuja `posts_fetch_frequency_hours` já venceu (porta a
+  lógica de `reddit-search-run.ts` do app de referência) → **dispara**
+  (não espera) uma busca no Reddit via Apify pra cada uma (actor
+  `harshmaur/reddit-scraper`, `lib/reddit/apify.ts::startRedditRun()`, ver
+  "Fase 6 — notas de implementação") usando `search_keywords` +
+  `suggested_subreddits` + `posts_time_window` da empresa, com um webhook
+  ad-hoc anexado ao run. Empresas devidas são disparadas em paralelo
+  (`Promise.allSettled`), isolando erro por empresa. Minutos depois, a
+  Apify chama `api/webhooks/apify-run-complete` com o resultado do run —
+  é só aí que os posts são de fato buscados, filtrados, ingeridos e
+  classificados (`lib/reddit/ingest.ts::completeCompanyIngestion()`).
+- Webhook `api/webhooks/posts` para automações externas (Zapier/Make/n8n) —
+  autenticado por `inbound_webhook_token` **por empresa** (não um segredo
+  global), mostrado na página de configurações de cada empresa com botão de
+  regenerar. **Não confundir** com `api/webhooks/apify-run-complete` acima:
+  esse é *inbound* de automações externas quaisquer; o outro é o retorno
+  específico da Apify pro run que o próprio app disparou, autenticado por
+  `APIFY_WEBHOOK_SECRET` (env var, não por empresa).
 
 **Classificador de relevância** (`lib/ai/classifier.ts`) — porta quase literal
 de `ai-classifier.server.ts`: 3 gates (`on_topic`, `author_matches_audience`,
@@ -492,12 +513,11 @@ já que todo export do arquivo agora é Apify-específico) roda o actor
   carrega campos de comentário (mesmo com `searchComments:false` no input) —
   `normalizeItem()` descarta qualquer item cujo `dataType` não seja `"post"`
   quando o campo vem preenchido.
-- **`ApifyRunError` carrega `.stats` de qualquer jeito**: um run pode falhar
-  em 3 pontos (start-run, poll até status terminal, fetch do dataset). Como
-  a Apify cobra por trabalho parcial mesmo num run que termina em `FAILED`/
-  `TIMED-OUT`/timeout do lado do cliente, `ingestCompanyPosts()` grava a
-  linha em `apify_runs` a partir de `err.stats` nesses casos — sem isso, um
-  run caro que falha no meio ficaria com custo invisível.
+- **`ApifyRunError` carrega `.stats` de qualquer jeito**: um run pode
+  terminar em `FAILED`/`ABORTED`/`TIMED-OUT` e a Apify cobra por trabalho
+  parcial mesmo assim, então `completeCompanyIngestion()` grava a linha em
+  `apify_runs` a partir de `err.stats` nesses casos — sem isso, um run caro
+  que falha no meio ficaria com custo invisível.
 - **Corte de idade agora é derivado de `posts_time_window`**, não mais um
   `MAX_POST_AGE_MS` fixo em 24h. O `t=` da URL agora é real (Reddit de
   verdade, diferente do `time` da RapidAPI, confirmado sem efeito na Fase
@@ -507,18 +527,36 @@ já que todo export do arquivo agora é Apify-específico) roda o actor
   `insertAndClassifyPosts()` já dedupe contra o banco por `(company_id,
   url)`; um dedupe em memória a mais só adicionaria risco de divergir do
   banco sem ganho nenhum.
-- **Cron e "Run ingestion now" continuam síncronos** (decisão explícita do
-  usuário, sem endpoint de webhook do Apify): a rota dispara o run e espera
-  terminar na mesma requisição. Isso exige `maxDuration = 300` nas duas
-  rotas e, criticamente, **Fluid Compute habilitado no projeto Vercel** — sem
-  isso o teto de duração no Hobby é 60s, insuficiente pra um run típico do
-  actor (proxy residencial, pode levar dezenas de segundos a poucos
-  minutos). Ver "Infra em produção" pra esse checklist.
-- **Cron trocou de loop sequencial pra `Promise.allSettled`**: com mais de
-  uma empresa devida no mesmo horário, esperar cada uma sequencialmente soma
-  o tempo de parede e aumenta ainda mais o risco de estourar o teto de
-  duração — sem isso a troca pra Apify pioraria um problema que já existia
-  em menor escala com a RapidAPI (que era rápida o bastante pra não doer).
+- **Cron e "Run ingestion now" são assíncronos** (redesenhado ainda nesta
+  sessão depois de medir um run real em ~4min contra a Apify de verdade —
+  perto demais do teto de duração pra confiar num design síncrono, e o
+  usuário topou trocar por "sem limite de tempo, tudo bem se demorar").
+  `dispatchCompanyIngestion()` só chama `startRedditRun()` (dispara o actor
+  com um [webhook ad-hoc](https://docs.apify.com/integrations/webhooks/ad-hoc-webhooks)
+  anexado via o parâmetro `webhooks` — base64 de
+  `[{eventTypes:[...], requestUrl: "...api/webhooks/apify-run-complete?secret=..."}]`
+  — na própria chamada de start-run) e grava uma linha `apify_runs` com
+  `status:'RUNNING'`, sem esperar o run terminar. Quando o run chega num
+  status terminal (minutos depois), a Apify faz POST nesse webhook com
+  `{eventType, resource}` (`resource` = o mesmo objeto de
+  `GET /actor-runs/{id}`); `completeCompanyIngestion()` busca o dataset,
+  filtra, ingere/classifica e atualiza a linha `apify_runs` (por `run_id`,
+  não insere outra) + `companies.posts_last_fetched_at`/`posts_last_error`.
+  Autenticado por um secret compartilhado na query string
+  (`APIFY_WEBHOOK_SECRET`) — é o padrão que a própria doc da Apify recomenda,
+  já que não existe assinatura HMAC nativa nos webhooks. Consequência boa:
+  **nenhuma rota mais depende de Fluid Compute** — dispatch e o handler do
+  webhook são só algumas chamadas HTTP rápidas, bem dentro do teto padrão de
+  60s do Hobby.
+- **Idempotência do webhook**: a Apify pode reentregar o mesmo webhook
+  (retry com backoff se a resposta não for 2xx, "em raros casos mais de uma
+  vez" mesmo com 2xx). `apify-run-complete/route.ts` busca a linha em
+  `apify_runs` pelo `run_id` e só processa se o status ainda for `RUNNING`
+  — uma segunda entrega do mesmo evento vira no-op.
+- **`Promise.allSettled` no cron**: agora é só isolamento de erro por
+  empresa (uma falha ao disparar o run de uma empresa não derruba as
+  outras), não mais uma questão de somar tempo de espera — dispatch é
+  rápido para qualquer empresa.
 - **`apify_runs` é staff-only** (sem policy de leitura pra `client`,
   diferente de `posts`) — é dado operacional/de billing, não algo que conta
   externa devia ver.
@@ -526,7 +564,20 @@ já que todo export do arquivo agora é Apify-específico) roda o actor
   rota de API dedicada (o `usageRoute.ts` do rascunho original do usuário
   foi pensado pro cenário deles de frontend separado consumindo um backend
   à parte — aqui, sendo Next.js, a página já pode chamar
-  `getApifyAccountUsage()` direto).
+  `getApifyAccountUsage()` direto). Mostra "Last run: in progress…" em vez
+  do custo/contagem quando a última linha de `apify_runs` da empresa ainda
+  está `RUNNING`.
+- **Só dá pra testar o disparo (dispatch) em dev local, não o round-trip
+  completo** — a Apify precisa de uma URL pública pra chamar de volta, e
+  não alcança `localhost`. Verificado nesta sessão via uma rota de debug
+  temporária (criada e depois removida, mesmo padrão já usado nas Fases
+  2/3): o disparo real contra a Apify funcionou de ponta a ponta
+  (`apify_runs` gravado, posts inseridos, `posts_last_error`/
+  `posts_last_fetched_at` corretos) **antes** do redesenho assíncrono, com
+  a versão síncrona da função. A versão assíncrona final (com o webhook) só
+  foi testada localmente até o disparo — o retorno via
+  `api/webhooks/apify-run-complete` precisa ser verificado contra a app já
+  deployada.
 
 ## Autenticação e aprovação de staff
 
@@ -544,27 +595,36 @@ empresas/personas e a ação de marcar como postado.
 - Vercel: projeto `groundwave/maa-reddit-app`, env vars de produção/preview já
   configuradas (Supabase, AI proxy, `CRON_SECRET`). URL:
   `https://maa-reddit-app.vercel.app`. **A partir da Fase 6, `RAPIDAPI_HOST`/
-  `RAPIDAPI_KEYS` saem e `APIFY_TOKEN` entra** — precisa ser setado à mão em
-  Production + Preview (Project Settings → Environment Variables), mesmo
-  lugar onde as chaves da RapidAPI estavam. **Confirmar também se Fluid
-  Compute está habilitado no projeto** (Project Settings → Functions): o
-  cron e o botão "Run ingestion now" agora esperam sincronamente um run do
-  Apify terminar (`maxDuration = 300` nas duas rotas) — sem Fluid Compute o
-  teto de duração no Hobby é 60s, bem menor do que um run típico do actor
-  pode levar.
+  `RAPIDAPI_KEYS` saem e entram duas variáveis novas** — precisa ser setado
+  à mão em Production + Preview (Project Settings → Environment Variables),
+  mesmo lugar onde as chaves da RapidAPI estavam:
+  - `APIFY_TOKEN` — token de API da conta Apify (Apify Console → Settings →
+    API & Integrations). Diferente da conexão MCP OAuth usada só dentro do
+    chat/editor — o backend chama a REST API do Apify direto.
+  - `APIFY_WEBHOOK_SECRET` — secret gerado localmente (não vem de lugar
+    nenhum externo, é só uma string aleatória), comparado contra `?secret=`
+    na URL do webhook ad-hoc que a Apify chama de volta
+    (`api/webhooks/apify-run-complete`) quando um run termina. Sem HMAC
+    nativo nos webhooks da Apify, esse é o mecanismo de auth recomendado
+    pela própria doc deles.
+  - Não precisa mais confirmar Fluid Compute — o redesenho assíncrono (ver
+    "Fase 6 — notas de implementação") tirou essa dependência: nenhuma rota
+    segura uma requisição por mais que alguns segundos agora.
 - **Limitação do plano Hobby**: cron só roda 1x/dia (`vercel.json` ajustado
   para `17 9 * * *`). Isso significa que `posts_fetch_frequency_hours` abaixo
   de 24h (as opções de 6h/12h que a UI de configurações vai oferecer, cf.
   app de referência) não vão de fato rodar mais que uma vez ao dia até fazer
   upgrade pro plano Pro. Não bloqueia nada agora, só vale saber.
 - Supabase: projeto próprio (ref `xmfmouontuvegtkwwhbw`), migrations
-  0001-0014 aplicadas (0009 corrige um bug real no trigger `handle_new_user` —
-  `CASE WHEN` sem cast para o enum `account_status` quebrava todo signup;
-  0010/0011 são a ida e volta do default de `posts_sort`, ver Fase 2; 0012 é
-  os campos manuais de views, ver Fase 5; 0013 torna `author`/`content`
-  opcionais em `posts` e adiciona `is_manual`, pro formulário "Log a manual
-  comment" em Posts; 0014 é `apify_runs` + `posts_time_window`, ver Fase 6).
-  **Sem CLI do Supabase nem `psql`
+  0001-0014 aplicadas, **0015 ainda pendente de aplicação manual** (0009
+  corrige um bug real no trigger `handle_new_user` — `CASE WHEN` sem cast
+  para o enum `account_status` quebrava todo signup; 0010/0011 são a ida e
+  volta do default de `posts_sort`, ver Fase 2; 0012 é os campos manuais de
+  views, ver Fase 5; 0013 torna `author`/`content` opcionais em `posts` e
+  adiciona `is_manual`, pro formulário "Log a manual comment" em Posts;
+  0014 é `apify_runs` + `posts_time_window`; 0015 adiciona o status
+  `RUNNING` em `apify_runs` pro redesenho assíncrono — ver Fase 6). **Sem
+  CLI do Supabase nem `psql`
   instalados nesta máquina** (confirmado ao tentar aplicar a 0012) — só a
   `SUPABASE_SERVICE_ROLE_KEY` (chave de API/PostgREST, não senha de banco),
   que não serve pra rodar DDL. Migrations novas precisam ser coladas
@@ -648,17 +708,25 @@ system de verdade em vez de estilo neutro genérico:
      bucketing/gap-fill com múltiplos pontos.
    - Pendente: notificações, credenciais de API por empresa, segunda
      empresa-piloto além da MAA.
-6. ✅ **Migração RapidAPI → Apify** (completa) — a busca de Reddit trocou de
-   provedor por completo: `lib/reddit/apify.ts` (antes `search.ts`) roda o
-   actor `harshmaur/reddit-scraper` via API REST do Apify (fluxo assíncrono:
-   dispara run → poll até terminar → busca itens do dataset), substituindo
-   `reddit34.p.rapidapi.com`. Nova tabela `apify_runs` (migration 0014) guarda
-   histórico de custo por run; Settings ganhou campo "Time window" (janela
-   real de busca, antes um no-op na RapidAPI) e um indicador discreto de
-   gasto mensal da conta Apify. Ver "Fase 6 — notas de implementação" pros
-   detalhes não óbvios. **`RAPIDAPI_HOST`/`RAPIDAPI_KEYS` saem, `APIFY_TOKEN`
-   entra** — precisa ser setado manualmente em `.env.local` e nas env vars da
-   Vercel (prod + preview) antes do próximo deploy.
+6. ✅ **Migração RapidAPI → Apify** (completa, redesenhada pra assíncrona
+   ainda nesta sessão) — a busca de Reddit trocou de provedor por completo:
+   `lib/reddit/apify.ts` (antes `search.ts`) roda o actor
+   `harshmaur/reddit-scraper` via API REST do Apify, substituindo
+   `reddit34.p.rapidapi.com`. Um run real mediu ~4min (5 keywords × 5
+   subreddits) — tempo demais/variável pra segurar uma requisição da Vercel
+   esperando, então o fluxo é: cron/"Run ingestion now" **disparam** o run
+   com um webhook ad-hoc anexado e devolvem na hora; `api/webhooks/apify-run-complete`
+   recebe o aviso da Apify quando o run termina (minutos depois) e só aí
+   busca os itens do dataset, filtra, ingere e classifica. Nova tabela
+   `apify_runs` (migrations 0014/0015, com status `RUNNING` intermediário)
+   guarda histórico de custo por run; Settings ganhou campo "Time window"
+   (janela real de busca, antes um no-op na RapidAPI) e um indicador
+   discreto de gasto mensal da conta Apify (mostra "in progress…" enquanto
+   o run mais recente ainda não voltou). Ver "Fase 6 — notas de
+   implementação" pros detalhes não óbvios. **`RAPIDAPI_HOST`/`RAPIDAPI_KEYS`
+   saem, `APIFY_TOKEN` + `APIFY_WEBHOOK_SECRET` entram** — precisa ser
+   setado manualmente em `.env.local` (já feito localmente) e nas env vars
+   da Vercel (prod + preview) antes do próximo deploy.
 
 ## Verificação
 

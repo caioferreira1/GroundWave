@@ -20,11 +20,6 @@ import {
 } from "@/components/ui";
 import { regenerateWebhookToken, runIngestionNow, updateCompanySettings } from "./actions";
 
-// updateCompanySettings/runIngestionNow are Server Actions invoked from this
-// page — "use server" files can't export non-async config like this, so it
-// lives here instead (the route/action inherits it from the invoking page).
-export const maxDuration = 300;
-
 export default async function CompanySettingsPage({
   params,
 }: {
@@ -240,8 +235,9 @@ export default async function CompanySettingsPage({
         </CardContent>
         <CardFooter className="flex-col items-stretch gap-3">
           <CardDescription>
-            Runs the Apify Reddit scraper for this company right now (uses real Apify credits) and
-            classifies any new posts — same code path as the daily cron, without waiting for it.
+            Starts the Apify Reddit scraper for this company in the background (uses real Apify
+            credits) — same code path as the daily cron. A real run takes a few minutes; results
+            and cost show up below once it finishes, no need to wait on this page.
           </CardDescription>
           <form action={runNowAction}>
             <Button type="submit" variant="secondary" size="sm">
@@ -249,7 +245,11 @@ export default async function CompanySettingsPage({
             </Button>
           </form>
           <CardDescription className="font-mono text-xs">
-            {lastRun ? `Last run: $${lastRun.cost_usd.toFixed(2)} (${lastRun.item_count} posts) · ` : ""}
+            {lastRun
+              ? lastRun.status === "RUNNING"
+                ? "Last run: in progress… · "
+                : `Last run: $${lastRun.cost_usd.toFixed(2)} (${lastRun.item_count} posts) · `
+              : ""}
             {usage
               ? `Apify: $${usage.spentUsd.toFixed(2)}${usage.limitUsd ? ` / $${usage.limitUsd.toFixed(2)}` : ""} this month`
               : "Apify usage unavailable"}

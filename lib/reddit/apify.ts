@@ -10,6 +10,13 @@ import "server-only";
  * multireddit search URLs ourselves (one per keyword, each covering every
  * configured subreddit) and pass them via `startUrls` — this is the only
  * way to get "these keywords, across all these subreddits" in one run.
+ *
+ * Fully async: `startRedditRun` only dispatches the actor run (with an
+ * ad-hoc webhook attached) and returns immediately — a real run can take
+ * several minutes (confirmed live: ~4min for 5 keywords x 5 subreddits),
+ * far past what's safe to hold a Vercel function open for. The webhook
+ * handler (app/api/webhooks/apify-run-complete) calls `parseRunResult`
+ * once Apify posts back the finished run.
  */
 
 const APIFY_BASE = "https://api.apify.com/v2";
@@ -17,10 +24,6 @@ const APIFY_BASE = "https://api.apify.com/v2";
 const ACTOR_ID = "harshmaur~reddit-scraper";
 const DATASET_FIELDS =
   "id,title,body,authorName,communityName,createdAt,upVotes,commentsCount,flair,postUrl,dataType";
-const TERMINAL = new Set(["SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"]);
-// Budget under Vercel's Fluid Compute ceiling (300s on Hobby), leaving room
-// for the start-run POST + final dataset fetch + DB writes in the same request.
-const DEFAULT_MAX_WAIT_SECS = 260;
 
 export type NormalizedRedditPost = {
   author: string;
@@ -57,11 +60,14 @@ export type ApifyRunStats = {
 
 export type ApifySearchResult = { posts: NormalizedRedditPost[]; run: ApifyRunStats };
 
-/** Shape of the `data` object in Apify's run endpoints — only the fields we read. */
-type ApifyRunObject = {
+/**
+ * Shape of the `resource` object Apify sends in the webhook payload (and
+ * what `GET /actor-runs/{id}` returns) — only the fields we read.
+ */
+export type ApifyRunResource = {
   id: string;
   status: string;
-  defaultDatasetId?: string;
+  defaultDatasetId?: string | null;
   usageTotalUsd?: number;
   stats?: { computeUnits?: number; runTimeSecs?: number };
   startedAt: string;
@@ -78,9 +84,9 @@ export type ApifyAccountUsage = {
 };
 
 /**
- * Thrown when a run reaches a non-SUCCEEDED terminal state, or our own
- * client-side wait deadline expires. Always carries whatever stats we have
- * so the caller can still record a failed run (Apify bills partial work).
+ * Thrown when a run's resource reports a non-SUCCEEDED terminal status.
+ * Always carries whatever stats we have so the caller can still record a
+ * failed run (Apify bills partial work even on FAILED/ABORTED/TIMED-OUT).
  */
 export class ApifyRunError extends Error {
   constructor(
@@ -90,20 +96,6 @@ export class ApifyRunError extends Error {
     super(message);
     this.name = "ApifyRunError";
   }
-}
-
-function emptyRunStats(): ApifyRunStats {
-  return {
-    runId: "",
-    datasetId: null,
-    status: "SKIPPED",
-    costUsd: 0,
-    computeUnits: 0,
-    itemCount: 0,
-    runTimeSecs: 0,
-    startedAt: new Date().toISOString(),
-    finishedAt: new Date().toISOString(),
-  };
 }
 
 /**
@@ -148,34 +140,57 @@ async function apifyGet<T>(path: string, token: string, timeoutMs = 30_000): Pro
   return res.json();
 }
 
-/** Polls (server-side long-poll via `waitForFinish`) until a terminal status. */
-async function waitForRun(
-  runId: string,
-  token: string,
-  maxWaitSecs = DEFAULT_MAX_WAIT_SECS,
-): Promise<ApifyRunObject> {
-  const deadline = Date.now() + maxWaitSecs * 1000;
-  for (;;) {
-    const { data: run } = await apifyGet<{ data: ApifyRunObject }>(
-      `/actor-runs/${runId}?waitForFinish=60`,
-      token,
-      70_000,
-    );
-    if (TERMINAL.has(run.status)) return run;
-    if (Date.now() > deadline) {
-      throw new ApifyRunError(`Run ${runId} did not finish within ${maxWaitSecs}s (status: ${run.status}).`, {
-        runId,
-        datasetId: run.defaultDatasetId ?? null,
-        status: "TIMEOUT_CLIENT",
-        costUsd: run.usageTotalUsd ?? 0,
-        computeUnits: run.stats?.computeUnits ?? 0,
-        itemCount: 0,
-        runTimeSecs: run.stats?.runTimeSecs ?? 0,
-        startedAt: run.startedAt,
-        finishedAt: null,
-      });
-    }
+/** Base64-encodes the ad-hoc webhook definition Apify expects on the `webhooks` query param. */
+function buildWebhooksParam(webhookUrl: string): string {
+  const definitions = [
+    {
+      eventTypes: ["ACTOR.RUN.SUCCEEDED", "ACTOR.RUN.FAILED", "ACTOR.RUN.ABORTED", "ACTOR.RUN.TIMED_OUT"],
+      requestUrl: webhookUrl,
+    },
+  ];
+  return Buffer.from(JSON.stringify(definitions)).toString("base64");
+}
+
+/**
+ * Starts the actor run with an ad-hoc webhook attached (fires once the run
+ * reaches a terminal state) and returns immediately — does NOT wait for the
+ * run to finish. Returns `null` if the company has no keywords/subreddits
+ * configured (nothing to search, no run started). `webhookUrl` must be a
+ * publicly reachable URL — Apify can't call back into localhost.
+ */
+export async function startRedditRun(
+  config: ApifySearchConfig,
+  webhookUrl: string,
+): Promise<{ runId: string; startedAt: string } | null> {
+  const urls = buildApifySearchUrls(config);
+  if (urls.length === 0) return null;
+
+  const token = requireToken();
+
+  const input = {
+    startUrls: urls.map((url) => ({ url })),
+    searchTerms: [],
+    searchPosts: true,
+    searchComments: false,
+    maxPostsCount: config.maxPosts,
+  };
+
+  const webhooks = buildWebhooksParam(webhookUrl);
+  const startRes = await fetch(
+    `${APIFY_BASE}/acts/${ACTOR_ID}/runs?token=${encodeURIComponent(token)}&webhooks=${encodeURIComponent(webhooks)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      signal: AbortSignal.timeout(30_000),
+    },
+  );
+  if (!startRes.ok) {
+    const detail = await startRes.text().catch(() => "");
+    throw new Error(`Apify start-run failed (HTTP ${startRes.status}): ${detail.slice(0, 300)}`);
   }
+  const { data: started } = (await startRes.json()) as { data: { id: string; startedAt: string } };
+  return { runId: started.id, startedAt: started.startedAt };
 }
 
 function normalizeItem(item: Record<string, unknown>): NormalizedRedditPost | null {
@@ -202,56 +217,33 @@ function normalizeItem(item: Record<string, unknown>): NormalizedRedditPost | nu
 }
 
 /**
- * Async flow: start run -> poll to terminal -> fetch dataset items. Always
- * returns posts + the run's cost/usage stats so the caller can persist
- * both to `apify_runs`. Throws `ApifyRunError` (carrying `.stats`) on a
- * non-SUCCEEDED terminal status or client-side timeout; throws a plain
- * Error if the run couldn't even be started (no run id to record yet).
+ * Given the (terminal) run resource from the webhook payload, fetches the
+ * dataset items and returns normalized posts + stats. Throws `ApifyRunError`
+ * (carrying `.stats`) if the run didn't end in SUCCEEDED — the webhook
+ * fires for FAILED/ABORTED/TIMED-OUT too, and those still need a stats row.
  */
-export async function runRedditSearch(config: ApifySearchConfig): Promise<ApifySearchResult> {
-  const urls = buildApifySearchUrls(config);
-  if (urls.length === 0) return { posts: [], run: emptyRunStats() };
+export async function parseRunResult(resource: ApifyRunResource): Promise<ApifySearchResult> {
+  const stats: ApifyRunStats = {
+    runId: resource.id,
+    datasetId: resource.defaultDatasetId ?? null,
+    status: resource.status,
+    costUsd: resource.usageTotalUsd ?? 0,
+    computeUnits: resource.stats?.computeUnits ?? 0,
+    itemCount: 0,
+    runTimeSecs: resource.stats?.runTimeSecs ?? 0,
+    startedAt: resource.startedAt,
+    finishedAt: resource.finishedAt ?? null,
+  };
+  if (resource.status !== "SUCCEEDED") {
+    throw new ApifyRunError(`Apify run ended with status ${resource.status}.`, stats);
+  }
+  if (!resource.defaultDatasetId) {
+    throw new ApifyRunError("Apify run succeeded but has no dataset id.", stats);
+  }
 
   const token = requireToken();
-
-  const input = {
-    startUrls: urls.map((url) => ({ url })),
-    searchTerms: [],
-    searchPosts: true,
-    searchComments: false,
-    maxPostsCount: config.maxPosts,
-  };
-
-  const startRes = await fetch(`${APIFY_BASE}/acts/${ACTOR_ID}/runs?token=${encodeURIComponent(token)}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-    signal: AbortSignal.timeout(30_000),
-  });
-  if (!startRes.ok) {
-    const detail = await startRes.text().catch(() => "");
-    throw new Error(`Apify start-run failed (HTTP ${startRes.status}): ${detail.slice(0, 300)}`);
-  }
-  const { data: started } = (await startRes.json()) as { data: { id: string } };
-
-  const run = await waitForRun(started.id, token);
-  const stats: ApifyRunStats = {
-    runId: run.id,
-    datasetId: run.defaultDatasetId ?? null,
-    status: run.status,
-    costUsd: run.usageTotalUsd ?? 0,
-    computeUnits: run.stats?.computeUnits ?? 0,
-    itemCount: 0,
-    runTimeSecs: run.stats?.runTimeSecs ?? 0,
-    startedAt: run.startedAt,
-    finishedAt: run.finishedAt ?? null,
-  };
-  if (run.status !== "SUCCEEDED") {
-    throw new ApifyRunError(`Apify run ended with status ${run.status}.`, stats);
-  }
-
   const items = await apifyGet<Record<string, unknown>[]>(
-    `/datasets/${run.defaultDatasetId}/items?fields=${DATASET_FIELDS}&clean=true&format=json`,
+    `/datasets/${resource.defaultDatasetId}/items?fields=${DATASET_FIELDS}&clean=true&format=json`,
     token,
   );
   const posts = items.map(normalizeItem).filter((p): p is NormalizedRedditPost => p !== null);
