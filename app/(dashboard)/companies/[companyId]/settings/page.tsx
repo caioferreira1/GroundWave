@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getApifyAccountUsage } from "@/lib/reddit/apify";
 import {
   Button,
   Card,
@@ -19,6 +20,11 @@ import {
 } from "@/components/ui";
 import { regenerateWebhookToken, runIngestionNow, updateCompanySettings } from "./actions";
 
+// updateCompanySettings/runIngestionNow are Server Actions invoked from this
+// page — "use server" files can't export non-async config like this, so it
+// lives here instead (the route/action inherits it from the invoking page).
+export const maxDuration = 300;
+
 export default async function CompanySettingsPage({
   params,
 }: {
@@ -29,12 +35,28 @@ export default async function CompanySettingsPage({
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, search_keywords, suggested_subreddits, posts_min_upvotes, posts_fetch_frequency_hours, posts_fetch_hour_utc, posts_sort, posts_max_per_run, posts_fetch_enabled, profile, guardrails_md, inbound_webhook_token",
+      "id, search_keywords, suggested_subreddits, posts_min_upvotes, posts_fetch_frequency_hours, posts_fetch_hour_utc, posts_sort, posts_time_window, posts_max_per_run, posts_fetch_enabled, profile, guardrails_md, inbound_webhook_token",
     )
     .eq("id", companyId)
     .maybeSingle();
 
   if (!company) notFound();
+
+  const { data: lastRun } = await supabase
+    .from("apify_runs")
+    .select("cost_usd, item_count, status")
+    .eq("company_id", companyId)
+    .order("started_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  let usage: Awaited<ReturnType<typeof getApifyAccountUsage>> | null = null;
+  try {
+    usage = await getApifyAccountUsage();
+  } catch {
+    // APIFY_TOKEN missing/invalid or the API is down — show "unavailable"
+    // instead of breaking the whole Settings page over a discreet badge.
+  }
 
   const hdrs = await headers();
   const host = hdrs.get("host") ?? "localhost:3000";
@@ -67,7 +89,7 @@ export default async function CompanySettingsPage({
             <Field
               label="Subreddits (one per line, with or without r/)"
               htmlFor="suggested_subreddits"
-              hint="Long combinations of keywords + subreddits can make the underlying Reddit search return zero results — if that happens the search adapter automatically drops subreddits (keeping keywords) until the query fits."
+              hint="Each keyword becomes its own search covering all of these subreddits at once — Max posts per run is a shared cap across every keyword combined, not per keyword."
             >
               <Textarea
                 id="suggested_subreddits"
@@ -118,25 +140,42 @@ export default async function CompanySettingsPage({
               </Field>
             </div>
 
-            <Field
-              label="Sort"
-              htmlFor="posts_sort"
-              hint={
-                <>
-                  &quot;Relevance&quot; matches the keyword/subreddit query strictly but ignores
-                  recency entirely — in testing it surfaced posts years old. &quot;New&quot; keeps
-                  results fresh (mixed with some off-topic noise); the AI classifier is what
-                  filters that noise for relevance, not the search step.
-                </>
-              }
-            >
-              <Select id="posts_sort" name="posts_sort" defaultValue={company.posts_sort}>
-                <option value="new">New (recommended)</option>
-                <option value="relevance">Relevance</option>
-                <option value="top">Top</option>
-                <option value="hot">Hot</option>
-              </Select>
-            </Field>
+            <div className="grid grid-cols-2 gap-4">
+              <Field
+                label="Sort"
+                htmlFor="posts_sort"
+                hint={
+                  <>
+                    &quot;Relevance&quot; matches the keyword/subreddit query strictly but ignores
+                    recency entirely — in testing it surfaced posts years old. &quot;New&quot; keeps
+                    results fresh (mixed with some off-topic noise); the AI classifier is what
+                    filters that noise for relevance, not the search step.
+                  </>
+                }
+              >
+                <Select id="posts_sort" name="posts_sort" defaultValue={company.posts_sort}>
+                  <option value="new">New (recommended)</option>
+                  <option value="relevance">Relevance</option>
+                  <option value="top">Top</option>
+                  <option value="hot">Hot</option>
+                  <option value="comments">Comments</option>
+                </Select>
+              </Field>
+              <Field
+                label="Time window"
+                htmlFor="posts_time_window"
+                hint="How far back the search looks (Reddit's own rolling window, e.g. 'day' = last 24h)."
+              >
+                <Select id="posts_time_window" name="posts_time_window" defaultValue={company.posts_time_window}>
+                  <option value="hour">Hour</option>
+                  <option value="day">Day (recommended)</option>
+                  <option value="week">Week</option>
+                  <option value="month">Month</option>
+                  <option value="year">Year</option>
+                  <option value="all">All time</option>
+                </Select>
+              </Field>
+            </div>
 
             <Switch
               name="posts_fetch_enabled"
@@ -186,7 +225,7 @@ export default async function CompanySettingsPage({
         <CardContent>
           <CardDescription>
             POST a post (or array of posts) to the inbound webhook from Zapier/Make/n8n as an
-            alternative to the RapidAPI search — same dedupe + AI classification pipeline either
+            alternative to the Apify search — same dedupe + AI classification pipeline either
             way.
           </CardDescription>
           <div className="flex flex-wrap items-center gap-2">
@@ -201,14 +240,20 @@ export default async function CompanySettingsPage({
         </CardContent>
         <CardFooter className="flex-col items-stretch gap-3">
           <CardDescription>
-            Runs the RapidAPI search for this company right now (uses real quota) and classifies
-            any new posts — same code path as the daily cron, without waiting for it.
+            Runs the Apify Reddit scraper for this company right now (uses real Apify credits) and
+            classifies any new posts — same code path as the daily cron, without waiting for it.
           </CardDescription>
           <form action={runNowAction}>
             <Button type="submit" variant="secondary" size="sm">
               Run ingestion now
             </Button>
           </form>
+          <CardDescription className="font-mono text-xs">
+            {lastRun ? `Last run: $${lastRun.cost_usd.toFixed(2)} (${lastRun.item_count} posts) · ` : ""}
+            {usage
+              ? `Apify: $${usage.spentUsd.toFixed(2)}${usage.limitUsd ? ` / $${usage.limitUsd.toFixed(2)}` : ""} this month`
+              : "Apify usage unavailable"}
+          </CardDescription>
         </CardFooter>
       </Card>
     </div>

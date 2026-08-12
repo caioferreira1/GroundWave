@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { insertAndClassifyPosts } from "@/lib/reddit/ingest";
-import type { NormalizedRedditPost } from "@/lib/reddit/search";
+import type { NormalizedRedditPost } from "@/lib/reddit/apify";
 
 const incomingPost = z.object({
   author: z.string().trim().min(1).default("[deleted]"),
@@ -16,7 +16,7 @@ const payloadSchema = z.union([incomingPost, z.array(incomingPost).min(1)]);
 
 /**
  * External-automation ingestion entry point (Zapier/Make/n8n) — the
- * alternative to the RapidAPI cron search. Authenticated per company by
+ * alternative to the Apify cron search. Authenticated per company by
  * `inbound_webhook_token` (not a single global secret, unlike the reference
  * app) so one leaked URL only exposes one company's inbound feed. Reuses
  * the same dedupe+insert+classify path as the cron search.

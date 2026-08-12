@@ -23,11 +23,19 @@ export async function updateCompanySettings(companyId: string, formData: FormDat
   const postsMinUpvotes = Number(formData.get("posts_min_upvotes") ?? 2);
   const postsFetchFrequencyHours = Number(formData.get("posts_fetch_frequency_hours") ?? 24);
   const postsFetchHourUtc = Number(formData.get("posts_fetch_hour_utc") ?? 12);
-  const postsSort = String(formData.get("posts_sort") ?? "relevance") as
+  const postsSort = String(formData.get("posts_sort") ?? "new") as
     | "new"
     | "top"
     | "hot"
-    | "relevance";
+    | "relevance"
+    | "comments";
+  const postsTimeWindow = String(formData.get("posts_time_window") ?? "day") as
+    | "hour"
+    | "day"
+    | "week"
+    | "month"
+    | "year"
+    | "all";
   const postsMaxPerRun = Number(formData.get("posts_max_per_run") ?? 100);
   const postsFetchEnabled = formData.get("posts_fetch_enabled") === "on";
   const profile = String(formData.get("profile") ?? "").trim() || null;
@@ -43,6 +51,7 @@ export async function updateCompanySettings(companyId: string, formData: FormDat
       posts_fetch_frequency_hours: postsFetchFrequencyHours,
       posts_fetch_hour_utc: postsFetchHourUtc,
       posts_sort: postsSort,
+      posts_time_window: postsTimeWindow,
       posts_max_per_run: postsMaxPerRun,
       posts_fetch_enabled: postsFetchEnabled,
       profile,
@@ -79,7 +88,7 @@ export async function runIngestionNow(companyId: string) {
   const { data: company, error } = await supabase
     .from("companies")
     .select(
-      "id, suggested_subreddits, search_keywords, posts_min_upvotes, posts_sort, posts_max_per_run",
+      "id, suggested_subreddits, search_keywords, posts_min_upvotes, posts_sort, posts_time_window, posts_max_per_run",
     )
     .eq("id", companyId)
     .single();

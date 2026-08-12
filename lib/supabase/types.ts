@@ -69,8 +69,9 @@ export type Database = {
           posts_min_upvotes: number;
           posts_fetch_frequency_hours: number;
           posts_fetch_hour_utc: number;
-          posts_sort: "new" | "top" | "hot" | "relevance";
+          posts_sort: "new" | "top" | "hot" | "relevance" | "comments";
           posts_max_per_run: number;
+          posts_time_window: "hour" | "day" | "week" | "month" | "year" | "all";
           posts_fetch_enabled: boolean;
           posts_last_fetched_at: string | null;
           posts_last_scheduled_run_at: string | null;
@@ -85,6 +86,31 @@ export type Database = {
           name: string;
         };
         Update: Partial<Database["public"]["Tables"]["companies"]["Row"]>;
+        Relationships: [];
+      };
+      apify_runs: {
+        Row: {
+          id: string;
+          company_id: string | null;
+          run_id: string;
+          dataset_id: string | null;
+          status: "SUCCEEDED" | "FAILED" | "ABORTED" | "TIMED-OUT" | "TIMEOUT_CLIENT";
+          cost_usd: number;
+          compute_units: number;
+          item_count: number;
+          run_time_secs: number;
+          scheduled: boolean;
+          error: string | null;
+          started_at: string;
+          finished_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["apify_runs"]["Row"]> & {
+          run_id: string;
+          status: "SUCCEEDED" | "FAILED" | "ABORTED" | "TIMED-OUT" | "TIMEOUT_CLIENT";
+          started_at: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["apify_runs"]["Row"]>;
         Relationships: [];
       };
       personas: {

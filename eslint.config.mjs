@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Design-reference drafts (see files-apify/README.md) — not app code,
+    // never meant to compile/lint as part of the project.
+    "files-apify/**",
   ]),
 ]);
 

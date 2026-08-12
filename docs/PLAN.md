@@ -79,6 +79,18 @@ trecho abaixo ainda disser o nome antigo, é resquício).*
   (ação real de `deletePostGeneration`, prova que o delete funciona) — sem
   impacto, era conteúdo gerado de teste, não teve efeito nos dados `posts`/
   `personas`/`companies` reais.
+- ✅ **Migração RapidAPI → Apify completa** — a busca de Reddit trocou de
+  provedor por completo (`lib/reddit/apify.ts`, actor `harshmaur/reddit-scraper`),
+  substituindo a RapidAPI (`reddit34.p.rapidapi.com`) do fim ao fim: cron,
+  webhook (só o import mudou), e "Run ingestion now". Nova tabela
+  `apify_runs` (migration 0014) + campo `posts_time_window` na Settings. Ver
+  item 6 em "Fases de construção" e "Fase 6 — notas de implementação" pros
+  detalhes. **Pendente de configuração manual do usuário antes do próximo
+  deploy**: `APIFY_TOKEN` em `.env.local` e na Vercel (substituindo
+  `RAPIDAPI_HOST`/`RAPIDAPI_KEYS`), migration 0014 aplicada via SQL Editor,
+  e confirmar se Fluid Compute está habilitado no projeto Vercel (necessário
+  pro cron/"Run ingestion now" síncronos não estourarem o teto de duração —
+  ver "Infra em produção").
 - Detalhes completos de infra (URLs, IDs de projeto) na seção "Infra em
   produção" mais abaixo. Segredos (chaves, senhas, tokens) não ficam neste
   arquivo nem em memória — estão só em `.env.local` (local) e nas env vars da
@@ -171,7 +183,7 @@ app/
 lib/
   supabase/{server.ts, admin.ts, types.ts}
   ai/{gateway.ts, classifier.ts, reply-generator.ts, post-generator.ts}  # Fase 3/4
-  reddit/{search.ts, ingest.ts, subreddits.ts}   # subreddits.ts: Fase 4
+  reddit/{apify.ts, ingest.ts, subreddits.ts}    # apify.ts: Fase 6 (era search.ts/RapidAPI)
   auth.ts                                     # personas.ts: Fase 3
 components/post-generator/{generate-button,post-generation-card,history-list,types}.tsx  # Fase 4
 scripts/import-personas.ts                    # ainda não existe (Fase 3)
@@ -244,8 +256,17 @@ implementação" abaixo pro porquê: `relevance` parecia melhor num teste
 isolado, mas em uso real trouxe posts de anos atrás; `new` (o valor final)
 é o que fica.
 
+`0012_manual_views_metrics.sql` / `0013_manual_comments.sql` — ver Fase 5.
+
+`0014_apify_runs.sql` — tabela `apify_runs` (histórico de custo/status por run
+do actor Apify) + `companies.posts_time_window` (janela de busca configurável,
+substitui o filtro fixo de 24h da era RapidAPI) + `posts_sort` ganha o valor
+`comments`. Ver "Fase 6 — notas de implementação".
+
 RLS em todas: staff (`is_staff()`) acesso total; clientes leitura via
-`can_access_company()`. Padrão idêntico ao já validado no app de referência.
+`can_access_company()`. Padrão idêntico ao já validado no app de referência
+(`apify_runs` é a única exceção — staff-only, sem policy de client, ver Fase
+6).
 
 ## Pipeline
 
@@ -254,9 +275,11 @@ e disparam o classificador:
 - Cron da Vercel (`vercel.json`, `17 9 * * *` — 1x/dia, limite do plano
   Hobby, ver seção "Infra em produção") → `api/cron/reddit-ingest` →
   filtra empresas cuja `posts_fetch_frequency_hours` já venceu (porta a lógica
-  de `reddit-search-run.ts` do app de referência) → busca no Reddit via
-  RapidAPI (`reddit34.p.rapidapi.com`) usando `search_keywords` +
-  `suggested_subreddits` da empresa.
+  de `reddit-search-run.ts` do app de referência) → busca no Reddit via Apify
+  (actor `harshmaur/reddit-scraper`, `lib/reddit/apify.ts`, ver "Fase 6 —
+  notas de implementação") usando `search_keywords` + `suggested_subreddits`
+  + `posts_time_window` da empresa. Empresas devidas rodam em paralelo
+  (`Promise.allSettled`), não sequencialmente.
 - Webhook `api/webhooks/posts` para automações externas — autenticado por
   `inbound_webhook_token` **por empresa** (não um segredo global), mostrado na
   página de configurações de cada empresa com botão de regenerar.
@@ -448,6 +471,63 @@ são óbvias só lendo o código:
   da combinação Turbopack + `next/font/google` nesta versão — foi tratado
   como transitório e resolvido reiniciando de novo.
 
+## Fase 6 — notas de implementação (migração RapidAPI → Apify)
+
+Substitui por completo a busca de Reddit (não é uma opção paralela — a
+RapidAPI saiu do pipeline). `lib/reddit/apify.ts` (renomeado de `search.ts`,
+já que todo export do arquivo agora é Apify-específico) roda o actor
+`harshmaur/reddit-scraper`. Decisões que não são óbvias só lendo o código:
+
+- **URLs de busca montadas à mão em vez dos campos nativos do actor**: o
+  actor tem `searchTerms`/`withinCommunity`/`searchSort`/`searchTime`
+  próprios, mas `withinCommunity` só aceita **um** subreddit por vez, e a
+  própria documentação do actor confirma que `searchSort`/`searchTime` "only
+  apply to Search Keywords, not Direct URLs" — ou seja, não dá pra pedir
+  "estas keywords, nestes N subreddits" usando os campos nativos. Por isso
+  `buildApifySearchUrls()` monta uma URL de busca multireddit do Reddit por
+  keyword (`r/sub1+sub2+.../search/?q=...&sort=...&t=...`) e passa todas via
+  `startUrls` — `maxPostsCount` é um teto **global**, compartilhado entre
+  todas as URLs de um mesmo run, não por keyword/subreddit.
+- **Filtro defensivo `dataType==='post'`**: o output schema do actor também
+  carrega campos de comentário (mesmo com `searchComments:false` no input) —
+  `normalizeItem()` descarta qualquer item cujo `dataType` não seja `"post"`
+  quando o campo vem preenchido.
+- **`ApifyRunError` carrega `.stats` de qualquer jeito**: um run pode falhar
+  em 3 pontos (start-run, poll até status terminal, fetch do dataset). Como
+  a Apify cobra por trabalho parcial mesmo num run que termina em `FAILED`/
+  `TIMED-OUT`/timeout do lado do cliente, `ingestCompanyPosts()` grava a
+  linha em `apify_runs` a partir de `err.stats` nesses casos — sem isso, um
+  run caro que falha no meio ficaria com custo invisível.
+- **Corte de idade agora é derivado de `posts_time_window`**, não mais um
+  `MAX_POST_AGE_MS` fixo em 24h. O `t=` da URL agora é real (Reddit de
+  verdade, diferente do `time` da RapidAPI, confirmado sem efeito na Fase
+  2) — o corte client-side continua existindo como reforço barato, só que
+  aplicando exatamente a janela configurada em vez de sempre 24h.
+- **`dedupePosts`/`seenIds` do rascunho original não foram portados** —
+  `insertAndClassifyPosts()` já dedupe contra o banco por `(company_id,
+  url)`; um dedupe em memória a mais só adicionaria risco de divergir do
+  banco sem ganho nenhum.
+- **Cron e "Run ingestion now" continuam síncronos** (decisão explícita do
+  usuário, sem endpoint de webhook do Apify): a rota dispara o run e espera
+  terminar na mesma requisição. Isso exige `maxDuration = 300` nas duas
+  rotas e, criticamente, **Fluid Compute habilitado no projeto Vercel** — sem
+  isso o teto de duração no Hobby é 60s, insuficiente pra um run típico do
+  actor (proxy residencial, pode levar dezenas de segundos a poucos
+  minutos). Ver "Infra em produção" pra esse checklist.
+- **Cron trocou de loop sequencial pra `Promise.allSettled`**: com mais de
+  uma empresa devida no mesmo horário, esperar cada uma sequencialmente soma
+  o tempo de parede e aumenta ainda mais o risco de estourar o teto de
+  duração — sem isso a troca pra Apify pioraria um problema que já existia
+  em menor escala com a RapidAPI (que era rápida o bastante pra não doer).
+- **`apify_runs` é staff-only** (sem policy de leitura pra `client`,
+  diferente de `posts`) — é dado operacional/de billing, não algo que conta
+  externa devia ver.
+- **Indicador de custo/uso é direto na Server Component da Settings**, sem
+  rota de API dedicada (o `usageRoute.ts` do rascunho original do usuário
+  foi pensado pro cenário deles de frontend separado consumindo um backend
+  à parte — aqui, sendo Next.js, a página já pode chamar
+  `getApifyAccountUsage()` direto).
+
 ## Autenticação e aprovação de staff
 
 Supabase Auth (email+senha) + `@supabase/ssr`. Signup cria `profiles` como
@@ -462,22 +542,29 @@ empresas/personas e a ação de marcar como postado.
 - GitHub: `caioferreira1/GroundWave` (branch `main`), Vercel conectado via git
   integration — todo push em `main` dispara deploy automático.
 - Vercel: projeto `groundwave/maa-reddit-app`, env vars de produção/preview já
-  configuradas (Supabase, AI proxy, `RAPIDAPI_HOST`, `CRON_SECRET`). URL:
-  `https://maa-reddit-app.vercel.app`. **Confirmar que `RAPIDAPI_KEYS`
-  (plural, separado por vírgula — ver Fase 2) também está setado lá**, não
-  só localmente.
+  configuradas (Supabase, AI proxy, `CRON_SECRET`). URL:
+  `https://maa-reddit-app.vercel.app`. **A partir da Fase 6, `RAPIDAPI_HOST`/
+  `RAPIDAPI_KEYS` saem e `APIFY_TOKEN` entra** — precisa ser setado à mão em
+  Production + Preview (Project Settings → Environment Variables), mesmo
+  lugar onde as chaves da RapidAPI estavam. **Confirmar também se Fluid
+  Compute está habilitado no projeto** (Project Settings → Functions): o
+  cron e o botão "Run ingestion now" agora esperam sincronamente um run do
+  Apify terminar (`maxDuration = 300` nas duas rotas) — sem Fluid Compute o
+  teto de duração no Hobby é 60s, bem menor do que um run típico do actor
+  pode levar.
 - **Limitação do plano Hobby**: cron só roda 1x/dia (`vercel.json` ajustado
   para `17 9 * * *`). Isso significa que `posts_fetch_frequency_hours` abaixo
   de 24h (as opções de 6h/12h que a UI de configurações vai oferecer, cf.
   app de referência) não vão de fato rodar mais que uma vez ao dia até fazer
   upgrade pro plano Pro. Não bloqueia nada agora, só vale saber.
 - Supabase: projeto próprio (ref `xmfmouontuvegtkwwhbw`), migrations
-  0001-0013 aplicadas (0009 corrige um bug real no trigger `handle_new_user` —
+  0001-0014 aplicadas (0009 corrige um bug real no trigger `handle_new_user` —
   `CASE WHEN` sem cast para o enum `account_status` quebrava todo signup;
   0010/0011 são a ida e volta do default de `posts_sort`, ver Fase 2; 0012 é
   os campos manuais de views, ver Fase 5; 0013 torna `author`/`content`
   opcionais em `posts` e adiciona `is_manual`, pro formulário "Log a manual
-  comment" em Posts). **Sem CLI do Supabase nem `psql`
+  comment" em Posts; 0014 é `apify_runs` + `posts_time_window`, ver Fase 6).
+  **Sem CLI do Supabase nem `psql`
   instalados nesta máquina** (confirmado ao tentar aplicar a 0012) — só a
   `SUPABASE_SERVICE_ROLE_KEY` (chave de API/PostgREST, não senha de banco),
   que não serve pra rodar DDL. Migrations novas precisam ser coladas
@@ -561,6 +648,17 @@ system de verdade em vez de estilo neutro genérico:
      bucketing/gap-fill com múltiplos pontos.
    - Pendente: notificações, credenciais de API por empresa, segunda
      empresa-piloto além da MAA.
+6. ✅ **Migração RapidAPI → Apify** (completa) — a busca de Reddit trocou de
+   provedor por completo: `lib/reddit/apify.ts` (antes `search.ts`) roda o
+   actor `harshmaur/reddit-scraper` via API REST do Apify (fluxo assíncrono:
+   dispara run → poll até terminar → busca itens do dataset), substituindo
+   `reddit34.p.rapidapi.com`. Nova tabela `apify_runs` (migration 0014) guarda
+   histórico de custo por run; Settings ganhou campo "Time window" (janela
+   real de busca, antes um no-op na RapidAPI) e um indicador discreto de
+   gasto mensal da conta Apify. Ver "Fase 6 — notas de implementação" pros
+   detalhes não óbvios. **`RAPIDAPI_HOST`/`RAPIDAPI_KEYS` saem, `APIFY_TOKEN`
+   entra** — precisa ser setado manualmente em `.env.local` e nas env vars da
+   Vercel (prod + preview) antes do próximo deploy.
 
 ## Verificação
 
