@@ -18,6 +18,20 @@ export async function runIngestionNow(companyId: string) {
   await requireStaff();
 
   const supabase = await createClient();
+
+  // A real run takes a few minutes (see dispatchCompanyIngestion) — without
+  // this, repeated clicks while one is still in flight would each spend
+  // real Apify credits on an overlapping run. No-op instead; the page
+  // already shows "Last run: in progress…" while this is true.
+  const { data: activeRun } = await supabase
+    .from("apify_runs")
+    .select("run_id")
+    .eq("company_id", companyId)
+    .eq("status", "RUNNING")
+    .limit(1)
+    .maybeSingle();
+  if (activeRun) return;
+
   const { data: company, error } = await supabase
     .from("companies")
     .select(
