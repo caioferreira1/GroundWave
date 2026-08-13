@@ -1,0 +1,22 @@
+name: Reddit ingest cron
+
+# Vercel's Hobby plan only allows 1 cron invocation/day, which meant each
+# company's configured "fetch hour (UTC)" was decorative — the dispatch
+# endpoint's own due-check (app/api/cron/reddit-ingest/route.ts) only ever
+# saw one fixed hour. This workflow replaces the vercel.json cron entirely,
+# calling the same endpoint every hour so that check actually runs against
+# every hour of the day. See docs/PLAN.md for the full history.
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call reddit-ingest cron endpoint
+        run: |
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "https://maa-reddit-app.vercel.app/api/cron/reddit-ingest"

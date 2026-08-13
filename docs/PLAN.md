@@ -12,6 +12,14 @@ trecho abaixo ainda disser o nome antigo, é resquício).*
 
 ## Status atual (ler isto primeiro se estiver retomando o projeto)
 
+- ✅ **Gatilho do cron de ingestão migrado da Vercel pro GitHub Actions**
+  (`.github/workflows/reddit-ingest-cron.yml`, roda de hora em hora) —
+  resolve a limitação do plano Hobby (1 cron/dia) que fazia o campo "Fetch
+  hour (UTC)" da UI de Settings ser decorativo. Detalhes na seção "Infra em
+  produção" (busca por "Limitação do plano Hobby"). **Pendente de
+  configuração manual do usuário**: cadastrar o secret `CRON_SECRET` (mesmo
+  valor da env var na Vercel) em Settings → Secrets and variables → Actions
+  do repo no GitHub — sem isso o workflow chama a rota e recebe 401.
 - ✅ **Fase 1 completa**: repo em `Ground Wave/maa-reddit-app`, código no
   GitHub (`caioferreira1/GroundWave`, branch `main`), deploy automático na
   Vercel (`https://maa-reddit-app.vercel.app`), Supabase próprio com as
@@ -190,7 +198,7 @@ app/
     companies/[companyId]/post-generator/{page,actions,loading}.tsx  # Fase 4
     generic-post-generator/{page,actions,loading}.tsx                # Fase 4
     admin/users/
-  api/cron/reddit-ingest/route.ts      # Vercel Cron
+  api/cron/reddit-ingest/route.ts      # acionado por GitHub Actions (de hora em hora)
   api/webhooks/posts/route.ts          # ingestão externa (Zapier/Make/n8n)
 lib/
   supabase/{server.ts, admin.ts, types.ts}
@@ -284,8 +292,8 @@ RLS em todas: staff (`is_staff()`) acesso total; clientes leitura via
 
 **Ingestão** — dois caminhos, ambos gravam em `posts` com `ai_status='pending'`
 e disparam o classificador:
-- Cron da Vercel (`vercel.json`, `17 9 * * *` — 1x/dia, limite do plano
-  Hobby, ver seção "Infra em produção") → `api/cron/reddit-ingest` →
+- GitHub Actions (`.github/workflows/reddit-ingest-cron.yml`, de hora em
+  hora — ver seção "Infra em produção") → `api/cron/reddit-ingest` →
   filtra empresas cuja `posts_fetch_frequency_hours` já venceu (porta a
   lógica de `reddit-search-run.ts` do app de referência) → **dispara**
   (não espera) uma busca no Reddit via Apify pra cada uma (actor
@@ -610,11 +618,23 @@ empresas/personas e a ação de marcar como postado.
   - Não precisa mais confirmar Fluid Compute — o redesenho assíncrono (ver
     "Fase 6 — notas de implementação") tirou essa dependência: nenhuma rota
     segura uma requisição por mais que alguns segundos agora.
-- **Limitação do plano Hobby**: cron só roda 1x/dia (`vercel.json` ajustado
-  para `17 9 * * *`). Isso significa que `posts_fetch_frequency_hours` abaixo
-  de 24h (as opções de 6h/12h que a UI de configurações vai oferecer, cf.
-  app de referência) não vão de fato rodar mais que uma vez ao dia até fazer
-  upgrade pro plano Pro. Não bloqueia nada agora, só vale saber.
+- ~~**Limitação do plano Hobby**: cron só roda 1x/dia~~ — **resolvido**: o
+  gatilho não é mais o cron da Vercel. `vercel.json` não declara mais
+  `crons`; quem chama `api/cron/reddit-ingest` agora é
+  `.github/workflows/reddit-ingest-cron.yml`, de hora em hora (`7 * * * *`,
+  UTC), via `curl` com `Authorization: Bearer $CRON_SECRET` (secret do GitHub
+  Actions, precisa ter o mesmo valor da env var `CRON_SECRET` na Vercel — **o
+  usuário precisa cadastrar isso manualmente** em
+  Settings → Secrets and variables → Actions do repo no GitHub). A lógica de
+  "due" dentro da rota (`posts_fetch_hour_utc`/`posts_fetch_frequency_hours`
+  em `app/api/cron/reddit-ingest/route.ts`) não mudou — ela já comparava a
+  hora configurada contra a hora atual corretamente, só nunca rodava mais de
+  1x/dia pra ter chance de bater. Agora bate de verdade, e frequências abaixo
+  de 24h (6h/12h) também passam a ser respeitadas, sem precisar de upgrade
+  pro plano Pro. Ressalva: workflows agendados do GitHub Actions só rodam na
+  branch default e o GitHub os desativa automaticamente depois de ~60 dias
+  sem commit no repo — se o cron parecer ter parado, checar
+  Actions → reddit-ingest-cron primeiro.
 - Supabase: projeto próprio (ref `xmfmouontuvegtkwwhbw`), migrations
   0001-0014 aplicadas, **0015 ainda pendente de aplicação manual** (0009
   corrige um bug real no trigger `handle_new_user` — `CASE WHEN` sem cast

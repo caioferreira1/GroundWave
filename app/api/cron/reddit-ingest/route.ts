@@ -2,13 +2,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { dispatchCompanyIngestion, type IngestCompany } from "@/lib/reddit/ingest";
 
 /**
- * Vercel Cron entry point (see vercel.json). Vercel sends
- * `Authorization: Bearer ${CRON_SECRET}` automatically when CRON_SECRET is
- * configured on the project; also callable by hand with the same header for
- * manual testing. For each company whose configured fetch frequency has
- * elapsed (and, for daily-or-slower schedules, whose configured hour of day
- * matches the current UTC hour), DISPATCHES an Apify run and returns — it
- * does not wait for the run to finish (a real run has been measured at
+ * Cron entry point, called hourly by .github/workflows/reddit-ingest-cron.yml
+ * (Vercel's Hobby plan only allows 1 cron invocation/day, which isn't
+ * granular enough for the per-company `posts_fetch_hour_utc` check below to
+ * mean anything — see docs/PLAN.md). Requires
+ * `Authorization: Bearer ${CRON_SECRET}`; also callable by hand with the
+ * same header for manual testing. For each company whose configured fetch
+ * frequency has elapsed (and, for daily-or-slower schedules, whose
+ * configured hour of day matches the current UTC hour), DISPATCHES an Apify
+ * run and returns — it does not wait for the run to finish (a real run has been measured at
  * ~4min, too long to hold this request open). Apify calls back
  * app/api/webhooks/apify-run-complete once each run is done, which is where
  * posts actually get ingested/classified. No Fluid Compute dependency here:

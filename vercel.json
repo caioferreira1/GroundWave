@@ -1,8 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/cron/reddit-ingest",
-      "schedule": "17 9 * * *"
-    }
-  ]
-}
+{}
