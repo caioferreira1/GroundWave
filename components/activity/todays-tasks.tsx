@@ -4,10 +4,8 @@ import type { CollaboratorTasks, DailyTaskKey, WeeklyGoalProgress } from "@/lib/
 import { TodaysTaskList } from "./todays-task-list";
 
 export type WeeklyGoalSummary = {
-  genericCommentsMin: number;
-  genericCommentsMax: number;
-  targetCommentsMin: number;
-  targetCommentsMax: number;
+  genericCommentsPerWeek: number;
+  targetCommentsPerWeek: number;
   genericPostIntervalDays: number;
   companyPostPerWeek: number;
 };
@@ -72,7 +70,7 @@ export function TodaysTasksCard({
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <CardTitle>Today&apos;s tasks</CardTitle>
-            <CardDescription>Weekly goal per account, and who still owes what today.</CardDescription>
+            <CardDescription>Weekly goal for the company, split across accounts, and who still owes what today.</CardDescription>
           </div>
           <div className="group relative shrink-0">
             <button
@@ -83,14 +81,10 @@ export function TodaysTasksCard({
               <Info className="h-4 w-4" />
             </button>
             <div className="pointer-events-none absolute right-0 top-full z-10 mt-2 w-64 space-y-1.5 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground opacity-0 shadow-md transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
-              <p>Per-account weekly config:</p>
-              <p>
-                {goals.genericCommentsMin}–{goals.genericCommentsMax} generic comments/wk
-              </p>
-              <p>
-                {goals.targetCommentsMin}–{goals.targetCommentsMax} target comments/wk
-              </p>
-              <p>Generic post every {goals.genericPostIntervalDays}d</p>
+              <p>Company weekly config (split across active accounts):</p>
+              <p>{goals.genericCommentsPerWeek} generic comments/wk total</p>
+              <p>{goals.targetCommentsPerWeek} target comments/wk total</p>
+              <p>Generic post every {goals.genericPostIntervalDays}d (per account)</p>
               <p>
                 {goals.companyPostPerWeek} company-mention post{goals.companyPostPerWeek === 1 ? "" : "s"}/wk (rotates)
               </p>

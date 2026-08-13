@@ -29,7 +29,7 @@ export default async function CompanyAccountsPage({
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, name, activity_generic_comments_min, activity_generic_comments_max, activity_target_comments_min, activity_target_comments_max, activity_generic_post_interval_days, activity_company_post_per_week",
+      "id, name, activity_generic_comments_per_week, activity_target_comments_per_week, activity_generic_post_interval_days, activity_company_post_per_week",
     )
     .eq("id", companyId)
     .maybeSingle();
@@ -63,48 +63,33 @@ export default async function CompanyAccountsPage({
         <Card>
           <CardHeader>
             <CardTitle>Weekly activity goals</CardTitle>
-            <CardDescription>Per account, per week. Drives the Today&apos;s tasks panel on Overview.</CardDescription>
+            <CardDescription>
+              Company-wide weekly total, split evenly across active accounts (remainder goes to the
+              higher-karma accounts). Drives the Today&apos;s tasks panel on Overview.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-4">
-              <Field label="Generic comments — min" htmlFor="activity_generic_comments_min">
+              <Field label="Generic comments / week" htmlFor="activity_generic_comments_per_week">
                 <Input
-                  id="activity_generic_comments_min"
-                  name="activity_generic_comments_min"
+                  id="activity_generic_comments_per_week"
+                  name="activity_generic_comments_per_week"
                   type="number"
                   min={0}
-                  defaultValue={company.activity_generic_comments_min}
-                />
-              </Field>
-              <Field label="Generic comments — max" htmlFor="activity_generic_comments_max">
-                <Input
-                  id="activity_generic_comments_max"
-                  name="activity_generic_comments_max"
-                  type="number"
-                  min={0}
-                  defaultValue={company.activity_generic_comments_max}
+                  defaultValue={company.activity_generic_comments_per_week}
                 />
               </Field>
               <Field
-                label="Target comments — min"
-                htmlFor="activity_target_comments_min"
+                label="Target comments / week"
+                htmlFor="activity_target_comments_per_week"
                 hint="Comments mentioning or contributing on this company's target posts."
               >
                 <Input
-                  id="activity_target_comments_min"
-                  name="activity_target_comments_min"
+                  id="activity_target_comments_per_week"
+                  name="activity_target_comments_per_week"
                   type="number"
                   min={0}
-                  defaultValue={company.activity_target_comments_min}
-                />
-              </Field>
-              <Field label="Target comments — max" htmlFor="activity_target_comments_max">
-                <Input
-                  id="activity_target_comments_max"
-                  name="activity_target_comments_max"
-                  type="number"
-                  min={0}
-                  defaultValue={company.activity_target_comments_max}
+                  defaultValue={company.activity_target_comments_per_week}
                 />
               </Field>
               <Field

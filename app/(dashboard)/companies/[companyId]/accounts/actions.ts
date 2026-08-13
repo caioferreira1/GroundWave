@@ -56,10 +56,8 @@ export async function updateActivityGoals(companyId: string, formData: FormData)
   await requireStaff();
 
   const fields = {
-    activity_generic_comments_min: Number(formData.get("activity_generic_comments_min") ?? 8),
-    activity_generic_comments_max: Number(formData.get("activity_generic_comments_max") ?? 12),
-    activity_target_comments_min: Number(formData.get("activity_target_comments_min") ?? 2),
-    activity_target_comments_max: Number(formData.get("activity_target_comments_max") ?? 3),
+    activity_generic_comments_per_week: Number(formData.get("activity_generic_comments_per_week") ?? 12),
+    activity_target_comments_per_week: Number(formData.get("activity_target_comments_per_week") ?? 3),
     activity_generic_post_interval_days: Number(formData.get("activity_generic_post_interval_days") ?? 2),
     activity_company_post_per_week: Number(formData.get("activity_company_post_per_week") ?? 1),
   };

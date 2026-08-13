@@ -22,11 +22,12 @@ export type RedditAccountForRotation = {
   id: string;
   account_name: string;
   owner_user_id: string;
+  karma: number;
 };
 
 export type ActivityGoals = {
-  genericCommentsMax: number;
-  targetCommentsMax: number;
+  genericCommentsPerWeek: number;
+  targetCommentsPerWeek: number;
   genericPostIntervalDays: number;
   companyPostPerWeek: number;
 };
@@ -142,10 +143,39 @@ export function pickCompanyMentionOwnerAccountId(
 }
 
 /**
- * Per-account "today" amounts: remaining weekly comment quota spread evenly
- * across the days left in the ISO week (including today), so the ask stays
- * small early in the week and catches up automatically near the weekend
- * instead of dumping the whole weekly number on one day.
+ * Splits a company-wide weekly total evenly across its active accounts —
+ * `Math.floor(total / n)` each, with any remainder (when it doesn't divide
+ * evenly) going one-by-one to the highest-karma accounts first, so the
+ * accounts with more standing absorb the extra rather than it landing
+ * arbitrarily.
+ */
+export function splitWeeklyTarget(
+  total: number,
+  accounts: { id: string; karma: number }[],
+): Map<string, number> {
+  const shares = new Map<string, number>();
+  if (accounts.length === 0) return shares;
+
+  const base = Math.floor(total / accounts.length);
+  const remainder = total % accounts.length;
+  for (const account of accounts) shares.set(account.id, base);
+
+  const byKarmaDesc = [...accounts].sort((a, b) => b.karma - a.karma || a.id.localeCompare(b.id));
+  for (let i = 0; i < remainder; i++) {
+    const account = byKarmaDesc[i];
+    shares.set(account.id, (shares.get(account.id) ?? base) + 1);
+  }
+  return shares;
+}
+
+/**
+ * Per-account "today" amounts. The company's weekly comment totals
+ * (goals.genericCommentsPerWeek/targetCommentsPerWeek) are first split
+ * across active accounts via splitWeeklyTarget, then each account's
+ * remaining share is spread evenly across the days left in the ISO week
+ * (including today), so the ask stays small early in the week and catches
+ * up automatically near the weekend instead of dumping the whole weekly
+ * number on one day.
  */
 export function computeAccountDailyTasks(
   accounts: RedditAccountForRotation[],
@@ -155,11 +185,13 @@ export function computeAccountDailyTasks(
   now: Date = new Date(),
 ): AccountDailyTask[] {
   const daysLeftInWeek = Math.max(1, 8 - isoWeekday(now));
+  const genericShares = splitWeeklyTarget(goals.genericCommentsPerWeek, accounts);
+  const targetShares = splitWeeklyTarget(goals.targetCommentsPerWeek, accounts);
 
   return accounts.map((account) => {
     const done = activity.commentsByAccount.get(account.id) ?? { generic: 0, target: 0 };
-    const genericRemaining = Math.max(0, goals.genericCommentsMax - done.generic);
-    const targetRemaining = Math.max(0, goals.targetCommentsMax - done.target);
+    const genericRemaining = Math.max(0, (genericShares.get(account.id) ?? 0) - done.generic);
+    const targetRemaining = Math.max(0, (targetShares.get(account.id) ?? 0) - done.target);
 
     return {
       accountId: account.id,
@@ -183,21 +215,17 @@ export type WeeklyGoalProgress = {
  * Aggregate this-week progress across all active accounts, vs. the
  * company's weekly goals — the "how's the week going" view, distinct from
  * computeAccountDailyTasks's day-sliced per-account numbers above (which
- * answer "what does each account owe today"). Comment targets use the
- * configured minimum (the actual floor to hit) summed across accounts;
- * company-mention posts use the company-wide quota as-is. Generic posts
- * don't have an explicit weekly count in the goals (just a posting cadence
- * in days), so the weekly target approximates each account's expected post
- * count at that cadence.
+ * answer "what does each account owe today"). Comment targets are the
+ * configured number as-is — it's already a company-wide weekly total (see
+ * splitWeeklyTarget), not a per-account number to multiply up. Company-
+ * mention posts use the company-wide quota as-is too. Generic posts don't
+ * have an explicit weekly count in the goals (just a posting cadence in
+ * days), so the weekly target approximates each account's expected post
+ * count at that cadence, summed across accounts.
  */
 export function computeWeeklyGoalProgress(
   accounts: RedditAccountForRotation[],
-  goals: {
-    genericCommentsMin: number;
-    targetCommentsMin: number;
-    genericPostIntervalDays: number;
-    companyPostPerWeek: number;
-  },
+  goals: ActivityGoals,
   activity: WeekActivity,
 ): WeeklyGoalProgress {
   const numAccounts = accounts.length;
@@ -209,8 +237,8 @@ export function computeWeeklyGoalProgress(
   const expectedPostsPerAccount = Math.max(1, Math.floor(7 / goals.genericPostIntervalDays));
 
   return {
-    genericComments: { done: sumComments("generic"), target: goals.genericCommentsMin * numAccounts },
-    targetComments: { done: sumComments("target"), target: goals.targetCommentsMin * numAccounts },
+    genericComments: { done: sumComments("generic"), target: goals.genericCommentsPerWeek },
+    targetComments: { done: sumComments("target"), target: goals.targetCommentsPerWeek },
     genericPosts: { done: sumPosts("generic"), target: expectedPostsPerAccount * numAccounts },
     companyMentionPosts: { done: sumPosts("company_mention"), target: goals.companyPostPerWeek },
   };

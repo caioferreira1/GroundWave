@@ -66,7 +66,7 @@ export default async function CompanyOverviewPage({
     supabase
       .from("companies")
       .select(
-        "id, name, profile, inbound_webhook_token, activity_generic_comments_min, activity_generic_comments_max, activity_target_comments_min, activity_target_comments_max, activity_generic_post_interval_days, activity_company_post_per_week",
+        "id, name, profile, inbound_webhook_token, activity_generic_comments_per_week, activity_target_comments_per_week, activity_generic_post_interval_days, activity_company_post_per_week",
       )
       .eq("id", companyId)
       .maybeSingle(),
@@ -105,10 +105,8 @@ export default async function CompanyOverviewPage({
   const taskDate = new Date().toISOString().slice(0, 10);
 
   const goals = {
-    genericCommentsMin: company.activity_generic_comments_min,
-    genericCommentsMax: company.activity_generic_comments_max,
-    targetCommentsMin: company.activity_target_comments_min,
-    targetCommentsMax: company.activity_target_comments_max,
+    genericCommentsPerWeek: company.activity_generic_comments_per_week,
+    targetCommentsPerWeek: company.activity_target_comments_per_week,
     genericPostIntervalDays: company.activity_generic_post_interval_days,
     companyPostPerWeek: company.activity_company_post_per_week,
   };

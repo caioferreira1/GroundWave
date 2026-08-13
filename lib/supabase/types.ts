@@ -79,10 +79,8 @@ export type Database = {
           posts_last_error_at: string | null;
           posts_retry_pending: boolean;
           inbound_webhook_token: string;
-          activity_generic_comments_min: number;
-          activity_generic_comments_max: number;
-          activity_target_comments_min: number;
-          activity_target_comments_max: number;
+          activity_generic_comments_per_week: number;
+          activity_target_comments_per_week: number;
           activity_generic_post_interval_days: number;
           activity_company_post_per_week: number;
           created_at: string;
