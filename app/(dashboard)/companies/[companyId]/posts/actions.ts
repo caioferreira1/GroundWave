@@ -13,17 +13,20 @@ import { dispatchCompanyIngestion, type IngestCompany } from "@/lib/reddit/inges
  * finishes later via the webhook (lib/reddit/ingest.ts::completeCompanyIngestion),
  * so this only kicks it off and revalidates; no redirect, staff stays on the
  * Posts page they triggered it from.
+ *
+ * Returns `{ error }` instead of throwing for expected/user-facing failures:
+ * Next.js redacts thrown Server Action errors to a generic digest in
+ * production (message only survives in server logs), so a `throw` here
+ * would show as an opaque React error #441 instead of a useful toast.
  */
-export async function runIngestionNow(companyId: string) {
+export async function runIngestionNow(companyId: string): Promise<{ error: string } | undefined> {
   await requireStaff();
 
   const supabase = await createClient();
 
   // A real run takes a few minutes (see dispatchCompanyIngestion) — without
   // this, repeated clicks while one is still in flight would each spend
-  // real Apify credits on an overlapping run. Throwing (rather than a
-  // silent no-op) lets the client surface it as a toast instead of the
-  // click looking like nothing happened.
+  // real Apify credits on an overlapping run.
   const { data: activeRun } = await supabase
     .from("apify_runs")
     .select("run_id")
@@ -32,7 +35,7 @@ export async function runIngestionNow(companyId: string) {
     .limit(1)
     .maybeSingle();
   if (activeRun) {
-    throw new Error("A run is already in progress for this company — wait for it to finish.");
+    return { error: "A run is already in progress for this company — wait for it to finish." };
   }
 
   const { data: company, error } = await supabase
@@ -42,10 +45,10 @@ export async function runIngestionNow(companyId: string) {
     )
     .eq("id", companyId)
     .single();
-  if (error) throw new Error(error.message);
+  if (error) return { error: error.message };
 
   const webhookSecret = process.env.APIFY_WEBHOOK_SECRET;
-  if (!webhookSecret) throw new Error("APIFY_WEBHOOK_SECRET is not configured.");
+  if (!webhookSecret) return { error: "APIFY_WEBHOOK_SECRET is not configured." };
   const hdrs = await headers();
   const host = hdrs.get("host") ?? "localhost:3000";
   const proto = hdrs.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");

@@ -12,13 +12,18 @@ type LastRun = { cost_usd: number; item_count: number; status: string } | null;
  * attempt (a run already in progress — see actions.ts::runIngestionNow) can
  * surface as a toast instead of the native form action's default error
  * overlay, or looking like the click did nothing.
+ *
+ * The action returns `{ error }` rather than throwing for expected failures
+ * — Next.js redacts thrown Server Action errors to a generic message in
+ * production, so a thrown error here would show an opaque React error
+ * instead of the real reason.
  */
 export function RunIngestionButton({
   action,
   lastRun,
   usage,
 }: {
-  action: () => Promise<void>;
+  action: () => Promise<{ error: string } | undefined>;
   lastRun: LastRun;
   usage: ApifyAccountUsage | null;
 }) {
@@ -28,7 +33,8 @@ export function RunIngestionButton({
     e.preventDefault();
     startTransition(async () => {
       try {
-        await action();
+        const result = await action();
+        if (result?.error) toast.error(result.error);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to start ingestion.");
       }
