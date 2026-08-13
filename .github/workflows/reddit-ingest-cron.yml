@@ -15,17 +15,6 @@ jobs:
   trigger:
     runs-on: ubuntu-latest
     steps:
-      # TEMPORARY — remove once the 401 is diagnosed. Never echoes the
-      # secret itself, only derived facts, so it's safe to leave in a
-      # public log.
-      - name: Debug secret shape (temporary)
-        env:
-          SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          echo "length: ${#SECRET}"
-          echo "starts with 'Bearer': $([[ "$SECRET" == Bearer* ]] && echo yes || echo no)"
-          trimmed="$(printf '%s' "$SECRET" | xargs)"
-          echo "has leading/trailing whitespace: $([[ "$SECRET" != "$trimmed" ]] && echo yes || echo no)"
       - name: Call reddit-ingest cron endpoint
         run: |
           curl --fail-with-body --silent --show-error \

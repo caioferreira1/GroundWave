@@ -13,13 +13,30 @@ trecho abaixo ainda disser o nome antigo, é resquício).*
 ## Status atual (ler isto primeiro se estiver retomando o projeto)
 
 - ✅ **Gatilho do cron de ingestão migrado da Vercel pro GitHub Actions**
-  (`.github/workflows/reddit-ingest-cron.yml`, roda de hora em hora) —
-  resolve a limitação do plano Hobby (1 cron/dia) que fazia o campo "Fetch
-  hour (UTC)" da UI de Settings ser decorativo. Detalhes na seção "Infra em
-  produção" (busca por "Limitação do plano Hobby"). **Pendente de
-  configuração manual do usuário**: cadastrar o secret `CRON_SECRET` (mesmo
-  valor da env var na Vercel) em Settings → Secrets and variables → Actions
-  do repo no GitHub — sem isso o workflow chama a rota e recebe 401.
+  (`.github/workflows/reddit-ingest-cron.yml`, roda de hora em hora, minuto
+  5) — resolve a limitação do plano Hobby (1 cron/dia) que fazia o campo
+  "Fetch hour (UTC)" da UI de Settings ser decorativo. Detalhes na seção
+  "Infra em produção" (busca por "Limitação do plano Hobby"). **Testado de
+  ponta a ponta e funcionando**: confirmado via disparo manual que a rota
+  responde 200 e dispara o Apify pra empresa devida na hora certa.
+  - Durante a configuração, o secret `CRON_SECRET` colado no GitHub batia
+    (mesmo tamanho, sem prefixo `Bearer`, sem espaço) mas a rota continuava
+    dando 401. Causa raiz: `CRON_SECRET` está marcado como env var
+    **"Sensitive"** na Vercel (Project Settings → Environment Variables) —
+    esse tipo de variável fica **permanentemente ilegível** depois de
+    criada (não dá pra ver o valor de novo nem pelo dashboard nem pelo
+    `vercel env pull`, só sobrescrever). O valor que estava em `.env.local`
+    era antigo/dessincronizado do que rodava em produção. Resolvido
+    **rotacionando o secret**: gerado um valor novo (`openssl rand -hex
+    24`), setado em Production via `vercel env rm`/`vercel env add`, feito
+    redeploy (`vercel deploy --prod` — **mudança de env var exige redeploy
+    pra propagar**, não basta salvar) e sincronizado o novo valor em
+    `.env.local`. **Se `CRON_SECRET` precisar ser trocado de novo no
+    futuro**, repetir esse fluxo (rotacionar, não tentar "recuperar" o
+    valor antigo) e lembrar de atualizar o secret correspondente no GitHub
+    Actions também — os dois lados (Vercel + GitHub) precisam ser
+    atualizados juntos, manualmente, não há sincronização automática entre
+    eles.
 - ✅ **Fase 1 completa**: repo em `Ground Wave/maa-reddit-app`, código no
   GitHub (`caioferreira1/GroundWave`, branch `main`), deploy automático na
   Vercel (`https://maa-reddit-app.vercel.app`), Supabase próprio com as
