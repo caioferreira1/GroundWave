@@ -1,6 +1,7 @@
-import { CheckCircle2 } from "lucide-react";
-import { Avatar, Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState } from "@/components/ui";
-import type { CollaboratorTasks } from "@/lib/activity/rotation";
+import { CheckCircle2, Info } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, EmptyState, Meter } from "@/components/ui";
+import type { CollaboratorTasks, DailyTaskKey, WeeklyGoalProgress } from "@/lib/activity/rotation";
+import { TodaysTaskList } from "./todays-task-list";
 
 export type WeeklyGoalSummary = {
   genericCommentsMin: number;
@@ -11,43 +12,80 @@ export type WeeklyGoalSummary = {
   companyPostPerWeek: number;
 };
 
-function taskChips(account: CollaboratorTasks["accounts"][number]): string[] {
-  const chips: string[] = [];
-  if (account.companyMentionPostToday) chips.push("Company-mention post");
-  if (account.genericPostToday) chips.push("Generic post");
-  if (account.genericCommentsToday > 0) {
-    chips.push(`${account.genericCommentsToday} generic comment${account.genericCommentsToday === 1 ? "" : "s"}`);
-  }
-  if (account.targetCommentsToday > 0) {
-    chips.push(`${account.targetCommentsToday} target comment${account.targetCommentsToday === 1 ? "" : "s"}`);
-  }
-  return chips;
-}
-
 /**
- * "Done" here is never a stored flag — it's whatever's left after
- * subtracting real tagged activity (reddit_account_id + comment_type/
- * post_type) from this week's goals. Logging a comment/post through the
- * existing mark-posted flows is what makes a chip disappear; there's no
- * separate task-completion state anywhere. Tasks are shown per account
- * (not summed per person) so it's clear which account needs what.
+ * "Done" here is whatever's left after subtracting activity from this
+ * week's goals — but "activity" now blends two sources: real tagged
+ * activity (reddit_account_id + comment_type/post_type, from the mark-
+ * posted flows) and manual checkbox completions (see
+ * supabase/migrations/0018_daily_task_completions.sql), merged together in
+ * lib/activity/rotation.ts's mergeActivity(). Checking a task off here
+ * therefore both reduces what's asked for tomorrow and moves the weekly
+ * meters up top — it's a self-reported stand-in for real activity, not a
+ * separate completion flag. Tasks are shown per account (not summed per
+ * person) so it's clear which account needs what.
+ *
+ * The meters up top and the checklist below still answer two different
+ * questions at two different grains — "how's the week going" (aggregate)
+ * vs "what does each account owe today" (per-account) — so they stay
+ * visually and structurally separate even though they now share the same
+ * underlying numbers.
  */
 export function TodaysTasksCard({
   goals,
+  weeklyProgress,
   collaboratorTasks,
   nameByOwner,
   hasActiveAccounts,
+  taskDate,
+  initialCompletions,
+  toggleTask,
 }: {
   goals: WeeklyGoalSummary;
+  weeklyProgress: WeeklyGoalProgress;
   collaboratorTasks: CollaboratorTasks[];
   nameByOwner: Map<string, string>;
   hasActiveAccounts: boolean;
+  taskDate: string;
+  initialCompletions: Set<string>;
+  toggleTask: (
+    redditAccountId: string,
+    taskKey: DailyTaskKey,
+    taskDate: string,
+    completed: boolean,
+    count: number,
+  ) => Promise<void>;
 }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Today&apos;s tasks</CardTitle>
-        <CardDescription>Weekly goal per account, and who still owes what today.</CardDescription>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <CardTitle>Today&apos;s tasks</CardTitle>
+            <CardDescription>Weekly goal per account, and who still owes what today.</CardDescription>
+          </div>
+          <div className="group relative shrink-0">
+            <button
+              type="button"
+              className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
+              aria-label="Weekly goal configuration"
+            >
+              <Info className="h-4 w-4" />
+            </button>
+            <div className="pointer-events-none absolute right-0 top-full z-10 mt-2 w-64 space-y-1.5 rounded-lg border border-border bg-popover p-3 text-xs text-popover-foreground opacity-0 shadow-md transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+              <p>Per-account weekly config:</p>
+              <p>
+                {goals.genericCommentsMin}–{goals.genericCommentsMax} generic comments/wk
+              </p>
+              <p>
+                {goals.targetCommentsMin}–{goals.targetCommentsMax} target comments/wk
+              </p>
+              <p>Generic post every {goals.genericPostIntervalDays}d</p>
+              <p>
+                {goals.companyPostPerWeek} company-mention post{goals.companyPostPerWeek === 1 ? "" : "s"}/wk (rotates)
+              </p>
+            </div>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         {!hasActiveAccounts ? (
@@ -58,45 +96,38 @@ export function TodaysTasksCard({
           />
         ) : (
           <>
-            <div className="flex flex-wrap items-center gap-1.5 border-b border-border pb-4">
-              <Badge variant="neutral">
-                {goals.genericCommentsMin}–{goals.genericCommentsMax} generic comments/wk
-              </Badge>
-              <Badge variant="neutral">
-                {goals.targetCommentsMin}–{goals.targetCommentsMax} target comments/wk
-              </Badge>
-              <Badge variant="neutral">Generic post every {goals.genericPostIntervalDays}d</Badge>
-              <Badge variant="neutral">
-                {goals.companyPostPerWeek} company-mention post{goals.companyPostPerWeek === 1 ? "" : "s"}/wk (rotates)
-              </Badge>
+            <div className="space-y-2 border-b border-border pb-4">
+              <p className="text-xs font-medium text-muted-foreground">This week, across all active accounts</p>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+                <Meter
+                  label="Generic comments"
+                  done={weeklyProgress.genericComments.done}
+                  target={weeklyProgress.genericComments.target}
+                />
+                <Meter
+                  label="Target comments"
+                  done={weeklyProgress.targetComments.done}
+                  target={weeklyProgress.targetComments.target}
+                />
+                <Meter label="Generic posts" done={weeklyProgress.genericPosts.done} target={weeklyProgress.genericPosts.target} />
+                <Meter
+                  label="Company-mention posts"
+                  done={weeklyProgress.companyMentionPosts.done}
+                  target={weeklyProgress.companyMentionPosts.target}
+                />
+              </div>
             </div>
 
-            <ul className="space-y-3 pt-1">
-              {collaboratorTasks.map((collaborator) => {
-                const name = nameByOwner.get(collaborator.ownerUserId) ?? "Unknown";
-                const accountsWithTasks = collaborator.accounts.filter((a) => taskChips(a).length > 0);
-
-                return (
-                  <li key={collaborator.ownerUserId} className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <Avatar name={name} size="sm" />
-                      <span className="text-sm font-medium text-foreground">{name}</span>
-                      {accountsWithTasks.length === 0 && <Badge variant="good">All caught up today</Badge>}
-                    </div>
-                    {accountsWithTasks.map((account) => (
-                      <div key={account.accountId} className="ml-9 flex flex-wrap items-center gap-1.5">
-                        <span className="font-mono text-xs text-muted-foreground">u/{account.accountName}</span>
-                        {taskChips(account).map((chip) => (
-                          <Badge key={chip} variant="accent">
-                            {chip}
-                          </Badge>
-                        ))}
-                      </div>
-                    ))}
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Today, by collaborator and account</p>
+              <TodaysTaskList
+                collaboratorTasks={collaboratorTasks}
+                nameByOwner={nameByOwner}
+                taskDate={taskDate}
+                initialCompletions={initialCompletions}
+                toggleTask={toggleTask}
+              />
+            </div>
           </>
         )}
       </CardContent>

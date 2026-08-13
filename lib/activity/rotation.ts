@@ -8,6 +8,14 @@
  * company-mention rotation below self-corrects if an account is added later
  * or someone misses their turn, since it's picked by recency each time
  * rather than a stored pointer.
+ *
+ * The manual "check off" completions from daily_task_completions
+ * (supabase/migrations/0018) are folded into the same WeekActivity shape via
+ * mergeActivity() before any of this runs, so a checked-off task counts the
+ * same as real tagged activity everywhere below — it reduces tomorrow's
+ * remaining quota and moves the weekly progress meters. It's a
+ * self-reported source layered on top of the real one though: if the same
+ * work later also gets logged for real, it's counted twice.
  */
 
 export type RedditAccountForRotation = {
@@ -60,6 +68,45 @@ function isoWeekday(now: Date): number {
 function daysSince(iso: string | null | undefined, now: Date): number {
   if (!iso) return Infinity;
   return (now.getTime() - new Date(iso).getTime()) / DAY_MS;
+}
+
+function laterOf(a: string | null | undefined, b: string | null | undefined): string | null {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return new Date(a).getTime() >= new Date(b).getTime() ? a : b;
+}
+
+/** Adds `extra` (e.g. manual completions) on top of `base` (real tagged activity) — same shape in, same shape out, so every function below stays oblivious to where the numbers came from. */
+export function mergeActivity(base: WeekActivity, extra: WeekActivity): WeekActivity {
+  const commentsByAccount = new Map(base.commentsByAccount);
+  for (const [accountId, extraCounts] of extra.commentsByAccount) {
+    const current = commentsByAccount.get(accountId) ?? { generic: 0, target: 0 };
+    commentsByAccount.set(accountId, {
+      generic: current.generic + extraCounts.generic,
+      target: current.target + extraCounts.target,
+    });
+  }
+
+  const postsByAccount = new Map(base.postsByAccount);
+  for (const [accountId, extraCounts] of extra.postsByAccount) {
+    const current = postsByAccount.get(accountId) ?? { generic: 0, company_mention: 0 };
+    postsByAccount.set(accountId, {
+      generic: current.generic + extraCounts.generic,
+      company_mention: current.company_mention + extraCounts.company_mention,
+    });
+  }
+
+  const lastGenericPostAt = new Map(base.lastGenericPostAt);
+  for (const [accountId, extraIso] of extra.lastGenericPostAt) {
+    lastGenericPostAt.set(accountId, laterOf(lastGenericPostAt.get(accountId), extraIso));
+  }
+
+  const lastCompanyMentionPostAt = new Map(base.lastCompanyMentionPostAt);
+  for (const [accountId, extraIso] of extra.lastCompanyMentionPostAt) {
+    lastCompanyMentionPostAt.set(accountId, laterOf(lastCompanyMentionPostAt.get(accountId), extraIso));
+  }
+
+  return { commentsByAccount, postsByAccount, lastGenericPostAt, lastCompanyMentionPostAt };
 }
 
 /**
@@ -123,6 +170,84 @@ export function computeAccountDailyTasks(
       companyMentionPostToday: companyMentionOwnerAccountId === account.id,
     };
   });
+}
+
+export type WeeklyGoalProgress = {
+  genericComments: { done: number; target: number };
+  targetComments: { done: number; target: number };
+  genericPosts: { done: number; target: number };
+  companyMentionPosts: { done: number; target: number };
+};
+
+/**
+ * Aggregate this-week progress across all active accounts, vs. the
+ * company's weekly goals — the "how's the week going" view, distinct from
+ * computeAccountDailyTasks's day-sliced per-account numbers above (which
+ * answer "what does each account owe today"). Comment targets use the
+ * configured minimum (the actual floor to hit) summed across accounts;
+ * company-mention posts use the company-wide quota as-is. Generic posts
+ * don't have an explicit weekly count in the goals (just a posting cadence
+ * in days), so the weekly target approximates each account's expected post
+ * count at that cadence.
+ */
+export function computeWeeklyGoalProgress(
+  accounts: RedditAccountForRotation[],
+  goals: {
+    genericCommentsMin: number;
+    targetCommentsMin: number;
+    genericPostIntervalDays: number;
+    companyPostPerWeek: number;
+  },
+  activity: WeekActivity,
+): WeeklyGoalProgress {
+  const numAccounts = accounts.length;
+  const sumComments = (key: "generic" | "target") =>
+    accounts.reduce((sum, a) => sum + (activity.commentsByAccount.get(a.id)?.[key] ?? 0), 0);
+  const sumPosts = (key: "generic" | "company_mention") =>
+    accounts.reduce((sum, a) => sum + (activity.postsByAccount.get(a.id)?.[key] ?? 0), 0);
+
+  const expectedPostsPerAccount = Math.max(1, Math.floor(7 / goals.genericPostIntervalDays));
+
+  return {
+    genericComments: { done: sumComments("generic"), target: goals.genericCommentsMin * numAccounts },
+    targetComments: { done: sumComments("target"), target: goals.targetCommentsMin * numAccounts },
+    genericPosts: { done: sumPosts("generic"), target: expectedPostsPerAccount * numAccounts },
+    companyMentionPosts: { done: sumPosts("company_mention"), target: goals.companyPostPerWeek },
+  };
+}
+
+export type DailyTaskKey = "generic_post" | "company_mention_post" | "generic_comments" | "target_comments";
+
+/**
+ * One checkbox-able item derived from an account's daily task — `key` is
+ * stable across days (for checkbox persistence), `label` carries the day's
+ * actual count, and `count` is what gets recorded on daily_task_completions
+ * when checked (1 for the boolean post tasks, the shown quantity for the
+ * comment tasks) so mergeActivity() can fold it back in correctly.
+ */
+export function taskItems(account: AccountDailyTask): { key: DailyTaskKey; label: string; count: number }[] {
+  const items: { key: DailyTaskKey; label: string; count: number }[] = [];
+  if (account.companyMentionPostToday) {
+    items.push({ key: "company_mention_post", label: "Company-mention post", count: 1 });
+  }
+  if (account.genericPostToday) {
+    items.push({ key: "generic_post", label: "Generic post", count: 1 });
+  }
+  if (account.genericCommentsToday > 0) {
+    items.push({
+      key: "generic_comments",
+      label: `${account.genericCommentsToday} generic comment${account.genericCommentsToday === 1 ? "" : "s"}`,
+      count: account.genericCommentsToday,
+    });
+  }
+  if (account.targetCommentsToday > 0) {
+    items.push({
+      key: "target_comments",
+      label: `${account.targetCommentsToday} target comment${account.targetCommentsToday === 1 ? "" : "s"}`,
+      count: account.targetCommentsToday,
+    });
+  }
+  return items;
 }
 
 /** Groups each account's daily task into its owning collaborator's list — no summing, so "which account needs what" stays visible. */

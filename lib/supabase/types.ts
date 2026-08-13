@@ -218,6 +218,27 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["post_generations"]["Row"]>;
         Relationships: [];
       };
+      daily_task_completions: {
+        Row: {
+          id: string;
+          company_id: string;
+          reddit_account_id: string;
+          task_key: "generic_post" | "company_mention_post" | "generic_comments" | "target_comments";
+          task_date: string;
+          count: number;
+          completed_by: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["daily_task_completions"]["Row"]> & {
+          company_id: string;
+          reddit_account_id: string;
+          task_key: "generic_post" | "company_mention_post" | "generic_comments" | "target_comments";
+          task_date: string;
+          completed_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["daily_task_completions"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

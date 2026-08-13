@@ -10,8 +10,16 @@ import { TrendAreaChart } from "@/components/analytics/trend-area-chart";
 import { TrendDualAreaChart } from "@/components/analytics/trend-dual-area-chart";
 import { TodaysTasksCard } from "@/components/activity/todays-tasks";
 import { getActiveRedditAccounts } from "@/lib/activity/accounts";
-import { getWeekActivityForRotation } from "@/lib/activity/queries";
-import { computeAccountDailyTasks, groupTasksByCollaborator, pickCompanyMentionOwnerAccountId } from "@/lib/activity/rotation";
+import { getManualCompletionActivity, getTodaysTaskCompletions, getWeekActivityForRotation } from "@/lib/activity/queries";
+import {
+  computeAccountDailyTasks,
+  computeWeeklyGoalProgress,
+  groupTasksByCollaborator,
+  mergeActivity,
+  pickCompanyMentionOwnerAccountId,
+  type WeeklyGoalProgress,
+} from "@/lib/activity/rotation";
+import { setDailyTaskCompletion } from "./actions";
 import {
   getActivityByRedditAccount,
   getCollaboratorActivity,
@@ -76,6 +84,18 @@ export default async function CompanyOverviewPage({
   let collaboratorTasks: ReturnType<typeof groupTasksByCollaborator> = [];
   let hasActiveAccounts = false;
   let nameByOwner = new Map<string, string>();
+  let taskCompletions = new Set<string>();
+  let weeklyProgress: WeeklyGoalProgress = {
+    genericComments: { done: 0, target: 0 },
+    targetComments: { done: 0, target: 0 },
+    genericPosts: { done: 0, target: 0 },
+    companyMentionPosts: { done: 0, target: 0 },
+  };
+
+  // UTC calendar date, matching the rest of the app's UTC-only date handling
+  // (see lib/analytics/bucket.ts) — a session left open past midnight UTC
+  // will keep checking off "yesterday"'s tasks until the page reloads.
+  const taskDate = new Date().toISOString().slice(0, 10);
 
   const goals = {
     genericCommentsMin: company.activity_generic_comments_min,
@@ -87,21 +107,29 @@ export default async function CompanyOverviewPage({
   };
 
   if (isStaff) {
-    const [accounts, weekActivity, activityByAccount, { data: profiles }] = await Promise.all([
-      getActiveRedditAccounts(supabase, companyId),
-      getWeekActivityForRotation(supabase, companyId),
-      getActivityByRedditAccount(supabase, companyId),
-      supabase.from("profiles").select("id, display_name, email"),
-    ]);
+    const [accounts, realActivity, manualActivity, activityByAccount, { data: profiles }, completions] =
+      await Promise.all([
+        getActiveRedditAccounts(supabase, companyId),
+        getWeekActivityForRotation(supabase, companyId),
+        getManualCompletionActivity(supabase, companyId),
+        getActivityByRedditAccount(supabase, companyId),
+        supabase.from("profiles").select("id, display_name, email"),
+        getTodaysTaskCompletions(supabase, companyId, taskDate),
+      ]);
 
     accountActivity = activityByAccount;
     hasActiveAccounts = accounts.length > 0;
     nameByOwner = new Map((profiles ?? []).map((p) => [p.id, p.display_name ?? p.email]));
+    taskCompletions = completions;
 
-    const companyMentionOwnerAccountId = pickCompanyMentionOwnerAccountId(accounts, weekActivity, goals);
-    const dailyTasks = computeAccountDailyTasks(accounts, goals, weekActivity, companyMentionOwnerAccountId);
+    const activity = mergeActivity(realActivity, manualActivity);
+    const companyMentionOwnerAccountId = pickCompanyMentionOwnerAccountId(accounts, activity, goals);
+    const dailyTasks = computeAccountDailyTasks(accounts, goals, activity, companyMentionOwnerAccountId);
     collaboratorTasks = groupTasksByCollaborator(dailyTasks, accounts);
+    weeklyProgress = computeWeeklyGoalProgress(accounts, goals, activity);
   }
+
+  const boundToggleTask = setDailyTaskCompletion.bind(null, companyId);
 
   return (
     <div className="space-y-6">
@@ -132,9 +160,13 @@ export default async function CompanyOverviewPage({
       {isStaff && (
         <TodaysTasksCard
           goals={goals}
+          weeklyProgress={weeklyProgress}
           collaboratorTasks={collaboratorTasks}
           nameByOwner={nameByOwner}
           hasActiveAccounts={hasActiveAccounts}
+          taskDate={taskDate}
+          initialCompletions={taskCompletions}
+          toggleTask={boundToggleTask}
         />
       )}
 
