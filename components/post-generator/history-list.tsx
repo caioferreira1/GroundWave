@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ChevronDown, Trash2 } from "lucide-react";
-import { Badge, Card, CopyButton, buttonClass } from "@/components/ui";
+import { Badge, Card, CopyButton, SubmitButton } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import { PostedStatus } from "./posted-status";
 import type { PostGenerationActions, PostGenerationRow } from "./types";
@@ -33,7 +33,7 @@ export function HistoryList({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium text-ink-muted">Previous posts</p>
+      <p className="text-sm font-medium text-muted-foreground">Previous posts</p>
       {posts.map((post) => {
         const expanded = expandedId === post.id;
         return (
@@ -51,15 +51,14 @@ export function HistoryList({
                   <Badge variant="accent" className="capitalize">
                     {post.theme}
                   </Badge>
-                  {post.persona_display_name && <Badge variant="good">{post.persona_display_name}</Badge>}
-                  <span className="text-xs text-ink-muted">{formatRelativeDate(post.created_at)}</span>
+                  <span className="text-xs text-muted-foreground">{formatRelativeDate(post.created_at)}</span>
                 </div>
-                <p className="text-sm font-medium text-ink">{post.title}</p>
-                {!expanded && <p className="line-clamp-2 text-xs text-ink-muted">{post.body}</p>}
+                <p className="text-sm font-medium text-foreground">{post.title}</p>
+                {!expanded && <p className="line-clamp-2 text-xs text-muted-foreground">{post.body}</p>}
               </div>
               <ChevronDown
                 className={cx(
-                  "h-4 w-4 shrink-0 text-ink-muted transition-transform duration-150",
+                  "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-150",
                   expanded && "rotate-180",
                 )}
                 strokeWidth={2}
@@ -68,18 +67,20 @@ export function HistoryList({
 
             {expanded && (
               <div className="mt-3 space-y-3 border-t border-border pt-3">
-                <p className="text-sm whitespace-pre-wrap text-ink-muted">{post.body}</p>
+                <p className="text-sm whitespace-pre-wrap text-muted-foreground">{post.body}</p>
                 <div className="flex flex-wrap items-center gap-2">
                   <CopyButton value={post.title} label="Copy Title" />
                   <CopyButton value={post.body} label="Copy Body" />
                   <form action={deleteAction.bind(null, post.id)} className="ml-auto">
-                    <button
-                      type="submit"
-                      className={cx(buttonClass("ghost", "sm"), "text-ink-muted hover:text-critical")}
+                    <SubmitButton
+                      variant="ghost"
+                      size="sm"
+                      pendingText="Deleting…"
+                      className="text-muted-foreground hover:text-destructive"
                     >
                       <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
                       Delete
-                    </button>
+                    </SubmitButton>
                   </form>
                 </div>
                 {actions && <PostedStatus post={post} actions={actions} />}

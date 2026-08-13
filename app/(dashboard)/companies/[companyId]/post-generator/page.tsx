@@ -31,18 +31,13 @@ export default async function CompanyPostGeneratorPage({
 
   const { data: generations } = await supabase
     .from("post_generations")
-    .select("id, subreddit, theme, title, body, created_at, persona_id, posted_at, posted_by, views_count")
+    .select(
+      "id, subreddit, theme, title, body, created_at, posted_at, posted_by, views_count, reddit_account_id, post_type",
+    )
     .eq("mode", "company")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false })
     .limit(20);
-
-  const personaIds = [...new Set((generations ?? []).map((g) => g.persona_id).filter((id): id is string => Boolean(id)))];
-  const { data: personas } =
-    personaIds.length > 0
-      ? await supabase.from("personas").select("id, display_name").in("id", personaIds)
-      : { data: [] };
-  const personaNameById = new Map((personas ?? []).map((p) => [p.id, p.display_name]));
 
   // Who's eligible to be credited as "posted this" — staff only, mirrors the
   // equivalent lookup on the Posts page's reply flow.
@@ -55,6 +50,17 @@ export default async function CompanyPostGeneratorPage({
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name ?? p.email]));
   const staffMembers = (profiles ?? []).filter((p) => staffIds.has(p.id));
 
+  // Reddit accounts this company has registered — used to tag which account
+  // posted an original post (see lib/activity/rotation.ts for what the
+  // tagging feeds). All accounts for name lookup; only active ones offered.
+  const { data: redditAccounts } = await supabase
+    .from("reddit_accounts")
+    .select("id, account_name, is_active")
+    .eq("company_id", companyId)
+    .order("account_name", { ascending: true });
+  const accountNameById = new Map((redditAccounts ?? []).map((a) => [a.id, a.account_name]));
+  const activeAccounts = (redditAccounts ?? []).filter((a) => a.is_active);
+
   const posts: PostGenerationRow[] = (generations ?? []).map((row) => ({
     id: row.id,
     subreddit: row.subreddit,
@@ -62,9 +68,10 @@ export default async function CompanyPostGeneratorPage({
     title: row.title,
     body: row.body,
     created_at: row.created_at,
-    persona_display_name: row.persona_id ? (personaNameById.get(row.persona_id) ?? null) : null,
     posted_at: row.posted_at,
     posted_by_display_name: row.posted_by ? (profileMap.get(row.posted_by) ?? "unknown") : null,
+    reddit_account_name: row.reddit_account_id ? (accountNameById.get(row.reddit_account_id) ?? "unknown") : null,
+    post_type: row.post_type,
     views_count: row.views_count,
   }));
   const [featured, ...history] = posts;
@@ -76,6 +83,7 @@ export default async function CompanyPostGeneratorPage({
     isStaff,
     staffMembers,
     currentUserId: user?.id ?? null,
+    accounts: activeAccounts,
     markPostedAction: markPostGenerationPosted.bind(null, companyId),
     unmarkPostedAction: unmarkPostGenerationPosted.bind(null, companyId),
     setViewsAction: setPostGenerationViews.bind(null, companyId),
@@ -85,7 +93,7 @@ export default async function CompanyPostGeneratorPage({
     <div className="space-y-6">
       <PageHeading
         title="Post Generator"
-        description="Generate original Reddit posts for this company's suggested subreddits, calibrated to an active persona when one fits."
+        description="Generate original Reddit posts for this company's suggested subreddits."
       />
 
       {isStaff ? (

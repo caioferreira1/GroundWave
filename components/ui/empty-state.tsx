@@ -22,12 +22,12 @@ export function EmptyState({
         className,
       )}
     >
-      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-surface-muted">
-        <Icon className="h-5 w-5 text-ink-muted" strokeWidth={1.75} />
+      <div className="flex h-11 w-11 items-center justify-center rounded-full bg-secondary">
+        <Icon className="h-5 w-5 text-muted-foreground" strokeWidth={1.75} />
       </div>
       <div className="space-y-1">
-        <p className="text-sm font-medium text-ink">{title}</p>
-        {description && <p className="max-w-sm text-sm text-ink-muted">{description}</p>}
+        <p className="text-sm font-medium text-foreground">{title}</p>
+        {description && <p className="max-w-sm text-sm text-muted-foreground">{description}</p>}
       </div>
       {action}
     </div>

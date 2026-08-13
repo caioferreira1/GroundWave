@@ -1,11 +1,9 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { dispatchCompanyIngestion, type IngestCompany } from "@/lib/reddit/ingest";
 
 function linesToList(raw: string): string[] {
   return raw
@@ -80,42 +78,4 @@ export async function regenerateWebhookToken(companyId: string) {
 
   revalidatePath(`/companies/${companyId}/settings`);
   redirect(`/companies/${companyId}/settings`);
-}
-
-export async function runIngestionNow(companyId: string) {
-  await requireStaff();
-
-  const supabase = await createClient();
-  const { data: company, error } = await supabase
-    .from("companies")
-    .select(
-      "id, suggested_subreddits, search_keywords, posts_min_upvotes, posts_sort, posts_time_window, posts_max_per_run",
-    )
-    .eq("id", companyId)
-    .single();
-  if (error) throw new Error(error.message);
-
-  const webhookSecret = process.env.APIFY_WEBHOOK_SECRET;
-  if (!webhookSecret) throw new Error("APIFY_WEBHOOK_SECRET is not configured.");
-  const hdrs = await headers();
-  const host = hdrs.get("host") ?? "localhost:3000";
-  const proto = hdrs.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const webhookUrl = `${proto}://${host}/api/webhooks/apify-run-complete?secret=${encodeURIComponent(webhookSecret)}`;
-
-  // This only DISPATCHES the Apify run — a real run takes minutes, so it
-  // finishes later via the webhook (lib/reddit/ingest.ts::completeCompanyIngestion),
-  // not before this redirect. Errors here mean the run couldn't even be
-  // started (e.g. bad token); those are persisted to companies.posts_last_error
-  // by dispatchCompanyIngestion itself — swallow here so a failed dispatch
-  // doesn't crash the page, staff just sees it on the Overview tab.
-  try {
-    await dispatchCompanyIngestion(company as IngestCompany, webhookUrl, { scheduled: false });
-  } catch (e) {
-    console.error("[runIngestionNow] failed", e);
-  }
-
-  revalidatePath(`/companies/${companyId}`);
-  revalidatePath(`/companies/${companyId}/posts`);
-  revalidatePath(`/companies/${companyId}/settings`);
-  redirect(`/companies/${companyId}`);
 }

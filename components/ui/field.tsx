@@ -8,7 +8,7 @@ import type {
 import { cx } from "@/lib/cx";
 
 const controlClass =
-  "w-full rounded-md border border-border bg-surface px-3 py-2 text-sm text-ink outline-none transition-colors duration-150 placeholder:text-ink-muted hover:border-border-strong focus:border-accent disabled:cursor-not-allowed disabled:opacity-50";
+  "w-full rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground outline-none transition-colors duration-150 placeholder:text-muted-foreground hover:border-border focus:border-primary disabled:cursor-not-allowed disabled:opacity-50";
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cx(controlClass, className)} {...props} />;
@@ -24,7 +24,7 @@ export function Select({ className, ...props }: SelectHTMLAttributes<HTMLSelectE
 
 export function Label({ className, ...props }: LabelHTMLAttributes<HTMLLabelElement>) {
   return (
-    <label className={cx("mb-1.5 block text-sm font-medium text-ink", className)} {...props} />
+    <label className={cx("mb-1.5 block text-sm font-medium text-foreground", className)} {...props} />
   );
 }
 
@@ -45,7 +45,7 @@ export function Field({
     <div className={className}>
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
-      {hint && <p className="mt-1.5 text-xs text-ink-muted">{hint}</p>}
+      {hint && <p className="mt-1.5 text-xs text-muted-foreground">{hint}</p>}
     </div>
   );
 }

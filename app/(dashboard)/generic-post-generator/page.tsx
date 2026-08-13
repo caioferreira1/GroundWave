@@ -27,9 +27,10 @@ export default async function GenericPostGeneratorPage() {
 
   const posts: PostGenerationRow[] = (data ?? []).map((row) => ({
     ...row,
-    persona_display_name: null,
     posted_at: null,
     posted_by_display_name: null,
+    reddit_account_name: null,
+    post_type: null,
     views_count: null,
   }));
   const [featured, ...history] = posts;
@@ -38,7 +39,7 @@ export default async function GenericPostGeneratorPage() {
     <div className="space-y-6">
       <PageHeading
         title="Post Generator"
-        description="Generate authentic Reddit posts with AI. Each one picks a random subreddit and theme, no company or persona targeting."
+        description="Generate authentic Reddit posts with AI. Each one picks a random subreddit and theme, no company targeting."
       />
 
       {isStaff ? (

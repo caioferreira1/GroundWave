@@ -3,11 +3,11 @@ import { cx } from "@/lib/cx";
 
 const buttonVariants = {
   primary:
-    "bg-accent text-white shadow-xs hover:bg-accent-strong hover:shadow-hover hover:-translate-y-px active:translate-y-0 active:scale-[0.98]",
+    "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 hover:shadow-hover hover:-translate-y-px active:translate-y-0 active:scale-[0.98]",
   secondary:
-    "border border-border bg-surface text-ink hover:border-accent/40 hover:bg-surface-hover hover:-translate-y-px",
-  ghost: "text-ink-muted hover:bg-surface-hover hover:text-ink",
-  danger: "border border-critical/30 bg-critical-soft text-critical hover:bg-critical/10",
+    "border border-border bg-card text-foreground hover:border-primary/40 hover:bg-secondary hover:-translate-y-px",
+  ghost: "text-muted-foreground hover:bg-secondary hover:text-foreground",
+  danger: "border border-destructive/30 bg-destructive/10 text-destructive hover:bg-destructive/20",
 };
 
 const buttonSizes = {

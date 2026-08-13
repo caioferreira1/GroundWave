@@ -10,10 +10,12 @@ import {
   User,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getApifyAccountUsage } from "@/lib/reddit/apify";
 import {
   Badge,
   Card,
   CardContent,
+  CardDescription,
   CardFooter,
   EmptyState,
   Input,
@@ -21,6 +23,7 @@ import {
   SegmentedControl,
   SegmentedControlLink,
   Select,
+  SubmitButton,
   Textarea,
   buttonClass,
 } from "@/components/ui";
@@ -29,6 +32,7 @@ import {
   addManualComment,
   generateComment,
   markCommentPosted,
+  runIngestionNow,
   saveGeneratedComment,
   setCommentViews,
   setHumanVerdict,
@@ -80,7 +84,7 @@ export default async function CompanyPostsPage({
   let query = supabase
     .from("posts")
     .select(
-      "id, author, url, content, subreddit, upvotes, posted_at, received_at, ai_status, is_relevant, relevance_score, ai_reasoning, ai_error, human_verdict, generated_comment, generated_comment_persona_id, generated_comment_persona_rationale, comment_posted_at, comment_posted_by, comment_views_count, is_manual",
+      "id, author, url, content, subreddit, upvotes, posted_at, received_at, ai_status, is_relevant, relevance_score, ai_reasoning, ai_error, human_verdict, generated_comment, comment_posted_at, comment_posted_by, comment_views_count, is_manual, reddit_account_id, comment_type",
     )
     .eq("company_id", companyId)
     .order("posted_at", { ascending: false, nullsFirst: false })
@@ -91,17 +95,6 @@ export default async function CompanyPostsPage({
   if (relevant) query = query.eq("is_relevant", relevant === "true");
 
   const { data: posts } = await query;
-
-  // All personas (not just active) so a draft's persona name still resolves
-  // even after staff deactivates it later; the override <Select> below
-  // filters to active ones itself.
-  const { data: personas } = await supabase
-    .from("personas")
-    .select("id, display_name, is_active")
-    .eq("company_id", companyId)
-    .order("display_name", { ascending: true });
-  const personaMap = new Map((personas ?? []).map((p) => [p.id, p.display_name]));
-  const activePersonas = (personas ?? []).filter((p) => p.is_active);
 
   // Who's eligible to be credited as "posted this comment" — staff only,
   // since only staff post replies on Reddit. Kept for future per-poster
@@ -115,7 +108,39 @@ export default async function CompanyPostsPage({
   const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name ?? p.email]));
   const staffMembers = (profiles ?? []).filter((p) => staffIds.has(p.id));
 
+  // Reddit accounts this company has registered — used to tag which account
+  // posted a comment (see lib/activity/rotation.ts for what the tagging
+  // feeds). All accounts (not just active) so old tags still resolve a name;
+  // only active ones are offered as choices going forward.
+  const { data: redditAccounts } = await supabase
+    .from("reddit_accounts")
+    .select("id, account_name, is_active")
+    .eq("company_id", companyId)
+    .order("account_name", { ascending: true });
+  const accountNameById = new Map((redditAccounts ?? []).map((a) => [a.id, a.account_name]));
+  const activeAccounts = (redditAccounts ?? []).filter((a) => a.is_active);
+
   const boundAddManualComment = addManualComment.bind(null, companyId);
+  const runNowAction = runIngestionNow.bind(null, companyId);
+
+  let lastRun: { cost_usd: number; item_count: number; status: string } | null = null;
+  let usage: Awaited<ReturnType<typeof getApifyAccountUsage>> | null = null;
+  if (isStaff) {
+    const { data } = await supabase
+      .from("apify_runs")
+      .select("cost_usd, item_count, status")
+      .eq("company_id", companyId)
+      .order("started_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    lastRun = data;
+    try {
+      usage = await getApifyAccountUsage();
+    } catch {
+      // APIFY_TOKEN missing/invalid or the API is down — show "unavailable"
+      // instead of breaking the whole Posts page over a discreet caption.
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -126,13 +151,44 @@ export default async function CompanyPostsPage({
             action={boundAddManualComment}
             staffMembers={staffMembers}
             currentUserId={user?.id ?? null}
+            accounts={activeAccounts}
           />
         )}
       </div>
 
+      {isStaff && (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">Run ingestion now</p>
+              <CardDescription>
+                Starts the Apify Reddit scraper for this company in the background (uses real
+                Apify credits) — same code path as the daily cron. A real run takes a few
+                minutes; results show up here once it finishes, no need to wait on this page.
+              </CardDescription>
+            </div>
+            <form action={runNowAction} className="flex flex-col items-end gap-1.5">
+              <SubmitButton variant="secondary" size="sm" pendingText="Starting…">
+                Run ingestion now
+              </SubmitButton>
+              <p className="font-mono text-xs text-muted-foreground">
+                {lastRun
+                  ? lastRun.status === "RUNNING"
+                    ? "Last run: in progress… · "
+                    : `Last run: $${lastRun.cost_usd.toFixed(2)} (${lastRun.item_count} posts) · `
+                  : ""}
+                {usage
+                  ? `Apify: $${usage.spentUsd.toFixed(2)}${usage.limitUsd ? ` / $${usage.limitUsd.toFixed(2)}` : ""} this month`
+                  : "Apify usage unavailable"}
+              </p>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex flex-wrap items-center gap-6">
         <div className="space-y-1.5">
-          <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">Status</p>
+          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Status</p>
           <SegmentedControl>
             {STATUS_FILTERS.map((f) => (
               <SegmentedControlLink
@@ -146,7 +202,7 @@ export default async function CompanyPostsPage({
           </SegmentedControl>
         </div>
         <div className="space-y-1.5">
-          <p className="text-xs font-medium tracking-wide text-ink-muted uppercase">Relevance</p>
+          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Relevance</p>
           <SegmentedControl>
             {RELEVANT_FILTERS.map((f) => (
               <SegmentedControlLink
@@ -192,9 +248,9 @@ export default async function CompanyPostsPage({
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-ink-muted">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
                   {post.author && (
-                    <span className="inline-flex items-center gap-1 font-medium text-ink">
+                    <span className="inline-flex items-center gap-1 font-medium text-foreground">
                       <User className="h-3.5 w-3.5" /> u/{post.author}
                     </span>
                   )}
@@ -214,38 +270,33 @@ export default async function CompanyPostsPage({
                     href={post.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-accent hover:underline"
+                    className="inline-flex items-center gap-1 text-primary hover:underline"
                   >
                     <ExternalLink className="h-3.5 w-3.5" /> View on Reddit
                   </a>
                 </div>
 
-                {post.content && <p className="line-clamp-3 text-sm text-ink">{post.content}</p>}
+                {post.content && <p className="line-clamp-3 text-sm text-foreground">{post.content}</p>}
 
                 {post.ai_reasoning && (
-                  <p className="border-l-2 border-border pl-3 text-xs text-ink-muted italic">
+                  <p className="border-l-2 border-border pl-3 text-xs text-muted-foreground italic">
                     {post.ai_reasoning}
                   </p>
                 )}
-                {post.ai_error && <p className="text-xs text-critical">{post.ai_error}</p>}
+                {post.ai_error && <p className="text-xs text-destructive">{post.ai_error}</p>}
 
                 {post.is_relevant && (
-                  <div className="space-y-2 rounded-lg border border-accent/15 bg-accent-soft p-3">
+                  <div className="space-y-2 rounded-lg border border-primary/15 bg-accent p-3">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium tracking-wide text-accent-strong uppercase">
+                      <span className="text-xs font-medium tracking-wide text-accent-foreground uppercase">
                         Reply draft
                       </span>
-                      {post.generated_comment_persona_id ? (
-                        <Badge variant="accent">
-                          {personaMap.get(post.generated_comment_persona_id) ?? "Unknown persona"}
-                        </Badge>
-                      ) : (
-                        !post.is_manual &&
-                        post.generated_comment && <Badge variant="neutral">No persona matched</Badge>
-                      )}
                       {post.comment_posted_at && (
                         <Badge variant="good">
                           Posted{post.comment_posted_by && ` by ${profileMap.get(post.comment_posted_by) ?? "unknown"}`}
+                          {post.reddit_account_id &&
+                            ` · u/${accountNameById.get(post.reddit_account_id) ?? "unknown"}`}
+                          {post.comment_type && ` · ${post.comment_type}`}
                         </Badge>
                       )}
                     </div>
@@ -255,7 +306,7 @@ export default async function CompanyPostsPage({
                         action={setCommentViews.bind(null, companyId, post.id)}
                         className="flex items-center gap-2"
                       >
-                        <label className="text-xs text-ink-muted" htmlFor={`views-${post.id}`}>
+                        <label className="text-xs text-muted-foreground" htmlFor={`views-${post.id}`}>
                           Views
                         </label>
                         <Input
@@ -266,16 +317,10 @@ export default async function CompanyPostsPage({
                           defaultValue={post.comment_views_count ?? ""}
                           className="h-8 w-24 text-xs"
                         />
-                        <button type="submit" className={buttonClass("secondary", "sm")}>
+                        <SubmitButton variant="secondary" size="sm" pendingText="Saving…">
                           Save
-                        </button>
+                        </SubmitButton>
                       </form>
-                    )}
-
-                    {post.generated_comment_persona_rationale && (
-                      <p className="text-xs text-ink-muted italic">
-                        {post.generated_comment_persona_rationale}
-                      </p>
                     )}
 
                     {post.generated_comment ? (
@@ -290,15 +335,15 @@ export default async function CompanyPostsPage({
                             defaultValue={post.generated_comment}
                             className="text-sm"
                           />
-                          <button type="submit" className={buttonClass("secondary", "sm")}>
+                          <SubmitButton variant="secondary" size="sm" pendingText="Saving…">
                             Save edits
-                          </button>
+                          </SubmitButton>
                         </form>
                       ) : (
-                        <p className="text-sm text-ink">{post.generated_comment}</p>
+                        <p className="text-sm text-foreground">{post.generated_comment}</p>
                       )
                     ) : (
-                      !isStaff && <p className="text-xs text-ink-muted">No reply drafted yet.</p>
+                      !isStaff && <p className="text-xs text-muted-foreground">No reply drafted yet.</p>
                     )}
 
                     {isStaff && (
@@ -308,31 +353,23 @@ export default async function CompanyPostsPage({
                             action={generateComment.bind(null, companyId, post.id)}
                             className="flex items-center gap-2"
                           >
-                            <Select name="persona_id" defaultValue="" className="h-8 w-auto text-xs">
-                              <option value="">Auto (AI picks persona)</option>
-                              {activePersonas.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.display_name}
-                                </option>
-                              ))}
-                            </Select>
-                            <button type="submit" className={buttonClass("secondary", "sm")}>
+                            <SubmitButton variant="secondary" size="sm" pendingText="Generating…">
                               {post.generated_comment ? "Regenerate" : "Generate reply"}
-                            </button>
+                            </SubmitButton>
                           </form>
                         )}
 
                         {post.generated_comment &&
                           (post.comment_posted_at ? (
                             <form action={unmarkCommentPosted.bind(null, companyId, post.id)}>
-                              <button type="submit" className={buttonClass("ghost", "sm")}>
+                              <SubmitButton variant="ghost" size="sm" pendingText="Unmarking…">
                                 Unmark as posted
-                              </button>
+                              </SubmitButton>
                             </form>
                           ) : (
                             <form
                               action={markCommentPosted.bind(null, companyId, post.id)}
-                              className="flex items-center gap-2"
+                              className="flex flex-wrap items-center gap-2"
                             >
                               <Select
                                 name="posted_by"
@@ -349,9 +386,25 @@ export default async function CompanyPostsPage({
                                   </option>
                                 ))}
                               </Select>
-                              <button type="submit" className={buttonClass("secondary", "sm")}>
+                              {activeAccounts.length > 0 && (
+                                <>
+                                  <Select name="reddit_account_id" defaultValue="" className="h-8 w-auto text-xs">
+                                    <option value="">No account tracked</option>
+                                    {activeAccounts.map((a) => (
+                                      <option key={a.id} value={a.id}>
+                                        u/{a.account_name}
+                                      </option>
+                                    ))}
+                                  </Select>
+                                  <Select name="comment_type" defaultValue="target" className="h-8 w-auto text-xs">
+                                    <option value="target">Target (mentions/contributes)</option>
+                                    <option value="generic">Generic</option>
+                                  </Select>
+                                </>
+                              )}
+                              <SubmitButton variant="secondary" size="sm" pendingText="Marking…">
                                 Mark as posted
-                              </button>
+                              </SubmitButton>
                             </form>
                           ))}
                       </div>
@@ -363,20 +416,14 @@ export default async function CompanyPostsPage({
               {isStaff && !post.is_manual && (
                 <CardFooter className="flex-wrap justify-end">
                   <form action={setHumanVerdict.bind(null, companyId, post.id, "relevant")}>
-                    <button
-                      type="submit"
-                      className={buttonClass("secondary", "sm")}
-                    >
+                    <SubmitButton variant="secondary" size="sm" pendingText="Marking…">
                       <ThumbsUp className="h-3.5 w-3.5" /> Mark relevant
-                    </button>
+                    </SubmitButton>
                   </form>
                   <form action={setHumanVerdict.bind(null, companyId, post.id, "irrelevant")}>
-                    <button
-                      type="submit"
-                      className={buttonClass("secondary", "sm")}
-                    >
+                    <SubmitButton variant="secondary" size="sm" pendingText="Marking…">
                       <ThumbsDown className="h-3.5 w-3.5" /> Mark irrelevant
-                    </button>
+                    </SubmitButton>
                   </form>
                 </CardFooter>
               )}

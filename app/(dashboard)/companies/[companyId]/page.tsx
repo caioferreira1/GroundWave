@@ -1,13 +1,27 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Activity, Eye, FileText, MessagesSquare, Radio, Send } from "lucide-react";
+import { Eye, MessagesSquare, Send } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { Badge, Card, PageHeading, StatCard, buttonClass } from "@/components/ui";
+import { Card, PageHeading, StatCard, buttonClass } from "@/components/ui";
+import { CategoryBarChart } from "@/components/analytics/category-bar-chart";
 import { ChartCard } from "@/components/analytics/chart-card";
 import { ChartLegend } from "@/components/analytics/legend";
 import { TrendAreaChart } from "@/components/analytics/trend-area-chart";
 import { TrendDualAreaChart } from "@/components/analytics/trend-dual-area-chart";
-import { getCommentsTrend, getOverviewTotals, getPostsPostedTrend, getViewsTrend } from "@/lib/analytics/queries";
+import { TodaysTasksCard } from "@/components/activity/todays-tasks";
+import { getActiveRedditAccounts } from "@/lib/activity/accounts";
+import { getWeekActivityForRotation } from "@/lib/activity/queries";
+import { computeAccountDailyTasks, groupTasksByCollaborator, pickCompanyMentionOwnerAccountId } from "@/lib/activity/rotation";
+import {
+  getActivityByRedditAccount,
+  getCollaboratorActivity,
+  getCommentsBySubreddit,
+  getCommentsTrend,
+  getOverviewTotals,
+  getPostsBySubreddit,
+  getPostsPostedTrend,
+  getViewsTrend,
+} from "@/lib/analytics/queries";
 
 export default async function CompanyOverviewPage({
   params,
@@ -17,11 +31,28 @@ export default async function CompanyOverviewPage({
   const { companyId } = await params;
   const supabase = await createClient();
 
-  const [{ data: company }, postsTrend, commentsTrend, viewsTrend, totals] = await Promise.all([
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: roles } = user
+    ? await supabase.from("user_roles").select("role").eq("user_id", user.id)
+    : { data: [] };
+  const isStaff = (roles ?? []).some((r) => r.role === "admin" || r.role === "coworker");
+
+  const [
+    { data: company },
+    postsTrend,
+    commentsTrend,
+    viewsTrend,
+    totals,
+    postsBySubreddit,
+    commentsBySubreddit,
+    collaboratorActivity,
+  ] = await Promise.all([
     supabase
       .from("companies")
       .select(
-        "id, name, profile, inbound_webhook_token, posts_fetch_enabled, posts_last_fetched_at, posts_last_error",
+        "id, name, profile, inbound_webhook_token, activity_generic_comments_min, activity_generic_comments_max, activity_target_comments_min, activity_target_comments_max, activity_generic_post_interval_days, activity_company_post_per_week",
       )
       .eq("id", companyId)
       .maybeSingle(),
@@ -29,11 +60,48 @@ export default async function CompanyOverviewPage({
     getCommentsTrend(supabase, companyId),
     getViewsTrend(supabase, companyId),
     getOverviewTotals(supabase, companyId),
+    getPostsBySubreddit(supabase, companyId),
+    getCommentsBySubreddit(supabase, companyId),
+    getCollaboratorActivity(supabase, companyId),
   ]);
 
   if (!company) notFound();
 
   const hasProfile = Boolean(company.profile);
+
+  // Reddit accounts are staff-only (no client RLS policy on reddit_accounts)
+  // — skip these queries entirely for non-staff viewers rather than relying
+  // on RLS to silently empty them out.
+  let accountActivity: Awaited<ReturnType<typeof getActivityByRedditAccount>> = [];
+  let collaboratorTasks: ReturnType<typeof groupTasksByCollaborator> = [];
+  let hasActiveAccounts = false;
+  let nameByOwner = new Map<string, string>();
+
+  const goals = {
+    genericCommentsMin: company.activity_generic_comments_min,
+    genericCommentsMax: company.activity_generic_comments_max,
+    targetCommentsMin: company.activity_target_comments_min,
+    targetCommentsMax: company.activity_target_comments_max,
+    genericPostIntervalDays: company.activity_generic_post_interval_days,
+    companyPostPerWeek: company.activity_company_post_per_week,
+  };
+
+  if (isStaff) {
+    const [accounts, weekActivity, activityByAccount, { data: profiles }] = await Promise.all([
+      getActiveRedditAccounts(supabase, companyId),
+      getWeekActivityForRotation(supabase, companyId),
+      getActivityByRedditAccount(supabase, companyId),
+      supabase.from("profiles").select("id, display_name, email"),
+    ]);
+
+    accountActivity = activityByAccount;
+    hasActiveAccounts = accounts.length > 0;
+    nameByOwner = new Map((profiles ?? []).map((p) => [p.id, p.display_name ?? p.email]));
+
+    const companyMentionOwnerAccountId = pickCompanyMentionOwnerAccountId(accounts, weekActivity, goals);
+    const dailyTasks = computeAccountDailyTasks(accounts, goals, weekActivity, companyMentionOwnerAccountId);
+    collaboratorTasks = groupTasksByCollaborator(dailyTasks, accounts);
+  }
 
   return (
     <div className="space-y-6">
@@ -41,81 +109,40 @@ export default async function CompanyOverviewPage({
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-12">
         <StatCard
-          className="lg:col-span-3"
-          icon={Radio}
-          label="Ingestion"
-          value={
-            <Badge
-              variant={company.posts_fetch_enabled ? "good" : "neutral"}
-              dot
-              pulse={company.posts_fetch_enabled}
-            >
-              {company.posts_fetch_enabled ? "Enabled" : "Disabled"}
-            </Badge>
-          }
-        />
-        <StatCard
-          className="lg:col-span-3"
-          icon={FileText}
-          label="Profile"
-          value={
-            <Badge variant={hasProfile ? "good" : "neutral"}>
-              {hasProfile ? "Generated" : "Not generated"}
-            </Badge>
-          }
-        />
-        <StatCard
-          className="sm:col-span-2 lg:col-span-6"
-          icon={Activity}
-          label="Last run"
-          value={
-            company.posts_last_error ? (
-              <Badge variant="critical">Failed</Badge>
-            ) : company.posts_last_fetched_at ? (
-              <Badge variant="good">Ran</Badge>
-            ) : (
-              <Badge variant="neutral">Never</Badge>
-            )
-          }
-          hint={
-            <>
-              {company.posts_last_fetched_at && (
-                <p className="mt-2 text-xs text-ink-muted">
-                  {new Date(company.posts_last_fetched_at).toLocaleString()}
-                </p>
-              )}
-              {company.posts_last_error && (
-                <p className="mt-1 text-xs break-words text-critical">{company.posts_last_error}</p>
-              )}
-            </>
-          }
-        />
-        <StatCard
           className="lg:col-span-4"
           icon={Send}
           label="Posts posted"
-          value={<span className="text-2xl font-semibold text-ink">{totals.postsPosted}</span>}
+          value={<span className="text-2xl font-semibold text-foreground">{totals.postsPosted}</span>}
         />
         <StatCard
           className="lg:col-span-4"
           icon={MessagesSquare}
           label="Comments posted"
-          value={<span className="text-2xl font-semibold text-ink">{totals.commentsPosted}</span>}
+          value={<span className="text-2xl font-semibold text-foreground">{totals.commentsPosted}</span>}
         />
         <StatCard
           className="lg:col-span-4"
           icon={Eye}
           label="Reported views"
-          value={<span className="text-2xl font-semibold text-ink">{totals.reportedViews}</span>}
-          hint={<p className="mt-2 text-xs text-ink-muted">Manually entered</p>}
+          value={<span className="text-2xl font-semibold text-foreground">{totals.reportedViews}</span>}
+          hint={<p className="mt-2 text-xs text-muted-foreground">Manually entered</p>}
         />
       </div>
+
+      {isStaff && (
+        <TodaysTasksCard
+          goals={goals}
+          collaboratorTasks={collaboratorTasks}
+          nameByOwner={nameByOwner}
+          hasActiveAccounts={hasActiveAccounts}
+        />
+      )}
 
       {!hasProfile && (
         <Card className="flex flex-wrap items-center justify-between gap-4 p-5">
           <div className="space-y-1">
-            <p className="text-sm font-medium text-ink">Add a company profile</p>
-            <p className="text-sm text-ink-muted">
+            <p className="text-sm font-medium text-foreground">Add a company profile</p>
+            <p className="text-sm text-muted-foreground">
               The relevance classifier uses this as ground truth — without it, every post is
               marked not relevant.
             </p>
@@ -134,7 +161,7 @@ export default async function CompanyOverviewPage({
             isEmpty={postsTrend.every((p) => p.count === 0)}
             emptyDescription="No posts marked as posted in this window yet."
           >
-            <TrendAreaChart data={postsTrend} color="var(--color-accent)" name="Posts posted" />
+            <TrendAreaChart data={postsTrend} color="var(--color-primary)" name="Posts posted" />
           </ChartCard>
         </div>
 
@@ -147,7 +174,7 @@ export default async function CompanyOverviewPage({
             legend={
               <ChartLegend
                 items={[
-                  { label: "Generated", color: "var(--color-accent)" },
+                  { label: "Generated", color: "var(--color-primary)" },
                   { label: "Posted", color: "var(--color-accent-2)" },
                 ]}
               />
@@ -156,10 +183,39 @@ export default async function CompanyOverviewPage({
             <TrendDualAreaChart
               data={commentsTrend}
               series={[
-                { key: "generated", name: "Generated", color: "var(--color-accent)" },
+                { key: "generated", name: "Generated", color: "var(--color-primary)" },
                 { key: "posted", name: "Posted", color: "var(--color-accent-2)" },
               ]}
-              glow
+            />
+          </ChartCard>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+        <div className="lg:col-span-6">
+          <ChartCard
+            title="Posts by subreddit"
+            description="All-time, posted posts"
+            isEmpty={postsBySubreddit.length === 0}
+            emptyDescription="No posts marked as posted yet."
+          >
+            <CategoryBarChart
+              data={postsBySubreddit.map((s) => ({ label: s.subreddit, count: s.count }))}
+              series={[{ key: "count", name: "Posts posted", color: "var(--color-primary)" }]}
+            />
+          </ChartCard>
+        </div>
+
+        <div className="lg:col-span-6">
+          <ChartCard
+            title="Comments by subreddit"
+            description="All-time, posted comments"
+            isEmpty={commentsBySubreddit.length === 0}
+            emptyDescription="No comments posted yet."
+          >
+            <CategoryBarChart
+              data={commentsBySubreddit.map((s) => ({ label: s.subreddit, count: s.count }))}
+              series={[{ key: "count", name: "Comments posted", color: "var(--color-accent-2)" }]}
             />
           </ChartCard>
         </div>
@@ -173,7 +229,7 @@ export default async function CompanyOverviewPage({
         legend={
           <ChartLegend
             items={[
-              { label: "From posts", color: "var(--color-accent)" },
+              { label: "From posts", color: "var(--color-primary)" },
               { label: "From comments", color: "var(--color-accent-2)" },
             ]}
           />
@@ -182,13 +238,60 @@ export default async function CompanyOverviewPage({
         <TrendDualAreaChart
           data={viewsTrend}
           series={[
-            { key: "postViews", name: "From posts", color: "var(--color-accent)" },
+            { key: "postViews", name: "From posts", color: "var(--color-primary)" },
             { key: "commentViews", name: "From comments", color: "var(--color-accent-2)" },
           ]}
           stacked
-          glow
         />
       </ChartCard>
+
+      <ChartCard
+        title="Activity by collaborator"
+        description="All-time posts and comments posted, per staff member"
+        isEmpty={collaboratorActivity.length === 0}
+        emptyDescription="No posts or comments posted by staff yet."
+        legend={
+          <ChartLegend
+            items={[
+              { label: "Posts", color: "var(--color-primary)" },
+              { label: "Comments", color: "var(--color-accent-2)" },
+            ]}
+          />
+        }
+      >
+        <CategoryBarChart
+          data={collaboratorActivity.map((c) => ({ label: c.name, posts: c.posts, comments: c.comments }))}
+          series={[
+            { key: "posts", name: "Posts", color: "var(--color-primary)" },
+            { key: "comments", name: "Comments", color: "var(--color-accent-2)" },
+          ]}
+        />
+      </ChartCard>
+
+      {isStaff && (
+        <ChartCard
+          title="Activity by Reddit account"
+          description="All-time posts and comments posted, per account"
+          isEmpty={accountActivity.length === 0}
+          emptyDescription="No posted activity tagged with a Reddit account yet."
+          legend={
+            <ChartLegend
+              items={[
+                { label: "Posts", color: "var(--color-primary)" },
+                { label: "Comments", color: "var(--color-accent-2)" },
+              ]}
+            />
+          }
+        >
+          <CategoryBarChart
+            data={accountActivity.map((a) => ({ label: a.name, posts: a.posts, comments: a.comments }))}
+            series={[
+              { key: "posts", name: "Posts", color: "var(--color-primary)" },
+              { key: "comments", name: "Comments", color: "var(--color-accent-2)" },
+            ]}
+          />
+        </ChartCard>
+      )}
     </div>
   );
 }

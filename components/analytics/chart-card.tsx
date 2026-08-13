@@ -25,7 +25,7 @@ export function ChartCard({
       </CardHeader>
       <CardContent>
         {legend && !isEmpty && <div className="pb-1">{legend}</div>}
-        <div className="h-64">
+        <div className="h-[220px] print:h-[200px]">
           {isEmpty ? (
             <EmptyState
               icon={BarChart3}

@@ -31,11 +31,16 @@ export async function deletePostGeneration(companyId: string, id: string) {
  * The poster is a manual choice (formData.posted_by), not necessarily the
  * staff member clicking the button — mirrors markCommentPosted in the Posts
  * flow (someone else's Reddit account may have been used to post it).
+ * reddit_account_id/post_type are optional (companies with no registered
+ * accounts yet can still mark posts posted) — left null when not chosen.
  */
 export async function markPostGenerationPosted(companyId: string, id: string, formData: FormData) {
   const { user } = await requireStaff();
 
   const postedBy = String(formData.get("posted_by") ?? "").trim() || user.id;
+  const redditAccountId = String(formData.get("reddit_account_id") ?? "").trim() || null;
+  const postTypeRaw = String(formData.get("post_type") ?? "").trim();
+  const postType = postTypeRaw === "generic" || postTypeRaw === "company_mention" ? postTypeRaw : null;
 
   const supabase = await createClient();
   const { data: posterRoles, error: roleError } = await supabase
@@ -48,12 +53,18 @@ export async function markPostGenerationPosted(companyId: string, id: string, fo
 
   const { error } = await supabase
     .from("post_generations")
-    .update({ posted_at: new Date().toISOString(), posted_by: postedBy })
+    .update({
+      posted_at: new Date().toISOString(),
+      posted_by: postedBy,
+      reddit_account_id: redditAccountId,
+      post_type: postType,
+    })
     .eq("id", id)
     .eq("company_id", companyId);
   if (error) throw new Error(error.message);
 
   revalidatePath(`/companies/${companyId}/post-generator`);
+  revalidatePath(`/companies/${companyId}`);
 }
 
 export async function unmarkPostGenerationPosted(companyId: string, id: string) {

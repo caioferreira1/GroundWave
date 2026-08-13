@@ -1,4 +1,5 @@
 export { Button, buttonClass } from "./button";
+export { SubmitButton } from "./submit-button";
 export { Input, Textarea, Select, Label, Field } from "./field";
 export { Switch } from "./switch";
 export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "./card";

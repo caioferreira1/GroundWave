@@ -2,19 +2,19 @@ import type { HTMLAttributes } from "react";
 import { cx } from "@/lib/cx";
 
 const badgeVariants = {
-  neutral: "bg-surface-muted text-ink-muted",
-  accent: "bg-accent-soft text-accent-strong",
-  good: "bg-good-soft text-good",
-  warning: "bg-warning-soft text-warning",
-  critical: "bg-critical-soft text-critical",
+  neutral: "bg-secondary text-muted-foreground",
+  accent: "bg-accent text-accent-foreground",
+  good: "bg-success/10 text-success",
+  warning: "bg-warning/10 text-warning",
+  critical: "bg-destructive/10 text-destructive",
 };
 
 const dotVariants = {
-  neutral: "bg-ink-muted",
-  accent: "bg-accent",
-  good: "bg-good",
+  neutral: "bg-muted-foreground",
+  accent: "bg-primary",
+  good: "bg-success",
   warning: "bg-warning",
-  critical: "bg-critical",
+  critical: "bg-destructive",
 };
 
 export function Badge({

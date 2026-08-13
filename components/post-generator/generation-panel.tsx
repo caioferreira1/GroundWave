@@ -49,22 +49,22 @@ function GeneratingCard() {
     <div
       className="animate-border-flow rounded-lg p-px"
       style={{
-        backgroundImage: "linear-gradient(90deg, var(--color-accent), var(--color-glow-cyan), var(--color-accent))",
+        backgroundImage: "linear-gradient(90deg, var(--color-primary), var(--color-chart-2), var(--color-primary))",
         backgroundSize: "200% 100%",
       }}
     >
-      <div className="space-y-4 rounded-[7px] bg-surface p-5">
+      <div className="space-y-4 rounded-[7px] bg-card p-5">
         <div className="flex flex-wrap items-center gap-2">
           <Skeleton className="h-5 w-20" />
           <Skeleton className="h-5 w-16" />
         </div>
         <Skeleton className="h-6 w-3/4" />
-        <div className="space-y-2 rounded-md bg-surface-muted p-3">
+        <div className="space-y-2 rounded-md bg-secondary p-3">
           <Skeleton className="h-3.5 w-full" />
           <Skeleton className="h-3.5 w-full" />
           <Skeleton className="h-3.5 w-2/3" />
         </div>
-        <p className="flex items-center gap-2 text-xs font-medium text-accent">
+        <p className="flex items-center gap-2 text-xs font-medium text-primary">
           <Sparkles className="h-3.5 w-3.5 animate-pulse" strokeWidth={2} />
           AI is drafting your post…
         </p>

@@ -6,13 +6,13 @@ import {
   PageHeading,
   SegmentedControl,
   SegmentedControlButton,
+  SubmitButton,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-  buttonClass,
 } from "@/components/ui";
 import { setUserRole, setUserStatus } from "./actions";
 
@@ -52,29 +52,29 @@ export default async function AdminUsersPage() {
             return (
               <TableRow key={p.id}>
                 <TableCell>
-                  <div className="text-ink">{p.display_name ?? p.email}</div>
-                  <div className="font-mono text-xs text-ink-muted">{p.email}</div>
+                  <div className="text-foreground">{p.display_name ?? p.email}</div>
+                  <div className="font-mono text-xs text-muted-foreground">{p.email}</div>
                 </TableCell>
                 <TableCell>
                   <Badge variant={statusVariant[p.status]}>{p.status}</Badge>
                 </TableCell>
                 <TableCell>
-                  {role ? <Badge variant="accent">{role}</Badge> : <span className="text-ink-muted">—</span>}
+                  {role ? <Badge variant="accent">{role}</Badge> : <span className="text-muted-foreground">—</span>}
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap items-center gap-2">
                     {p.status !== "approved" && (
                       <form action={setUserStatus.bind(null, p.id, "approved")}>
-                        <button type="submit" className={buttonClass("secondary", "sm")}>
-                          <CheckCircle2 className="h-3.5 w-3.5 text-good" /> Approve
-                        </button>
+                        <SubmitButton variant="secondary" size="sm" pendingText="Approving…">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-success" /> Approve
+                        </SubmitButton>
                       </form>
                     )}
                     {p.status !== "denied" && (
                       <form action={setUserStatus.bind(null, p.id, "denied")}>
-                        <button type="submit" className={buttonClass("secondary", "sm")}>
-                          <XCircle className="h-3.5 w-3.5 text-critical" /> Deny
-                        </button>
+                        <SubmitButton variant="secondary" size="sm" pendingText="Denying…">
+                          <XCircle className="h-3.5 w-3.5 text-destructive" /> Deny
+                        </SubmitButton>
                       </form>
                     )}
                     <SegmentedControl>

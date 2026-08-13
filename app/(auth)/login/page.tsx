@@ -23,7 +23,7 @@ export default function LoginPage() {
         className="animate-drift pointer-events-none absolute inset-x-0 top-0 h-[36rem] opacity-90"
         style={{
           background:
-            "radial-gradient(ellipse at top, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%), radial-gradient(ellipse 40rem 24rem at 80% -10%, color-mix(in srgb, var(--accent-2) 18%, transparent), transparent 65%)",
+            "radial-gradient(ellipse at top, color-mix(in srgb, var(--color-primary) 22%, transparent), transparent 60%), radial-gradient(ellipse 40rem 24rem at 80% -10%, color-mix(in srgb, var(--accent-2) 18%, transparent), transparent 65%)",
         }}
         aria-hidden="true"
       />
@@ -45,7 +45,7 @@ export default function LoginPage() {
             </SegmentedControl>
           </div>
 
-          <p className="mb-6 text-center text-sm text-ink-muted">
+          <p className="mb-6 text-center text-sm text-muted-foreground">
             {mode === "signin"
               ? "Staff and client access to Reddit monitoring and content generation."
               : "New accounts start pending until an admin approves them."}
@@ -67,7 +67,7 @@ export default function LoginPage() {
             </Field>
 
             {state.error && (
-              <div className="flex items-start gap-2 rounded-md bg-critical-soft px-3 py-2 text-sm text-critical">
+              <div className="flex items-start gap-2 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{state.error}</span>
               </div>

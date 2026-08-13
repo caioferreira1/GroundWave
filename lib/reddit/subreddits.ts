@@ -1,4 +1,4 @@
-// Fixed subreddit list for generic-mode post generation (no company/persona
+// Fixed subreddit list for generic-mode post generation (no company
 // targeting). Ported from the reference app's playbook "Post Creator" data
 // table. Client-safe (no server-only import) so it can be imported from
 // both server actions and, if ever needed, client components.

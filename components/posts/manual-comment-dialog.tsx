@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { Button, Field, Input, Select, Textarea, buttonClass } from "@/components/ui";
 
 type StaffMember = { id: string; display_name: string | null; email: string | null };
+type RedditAccount = { id: string; account_name: string };
 
 /**
  * Native <dialog> instead of a custom overlay component — showModal() gives
@@ -16,10 +17,12 @@ export function ManualCommentDialog({
   action,
   staffMembers,
   currentUserId,
+  accounts,
 }: {
   action: (formData: FormData) => Promise<void>;
   staffMembers: StaffMember[];
   currentUserId: string | null;
+  accounts: RedditAccount[];
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -56,12 +59,12 @@ export function ManualCommentDialog({
           if (e.target === dialogRef.current) close();
         }}
         onCancel={close}
-        className="fixed top-1/2 left-1/2 m-0 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-surface p-0 text-ink shadow-lg backdrop:bg-black/20 backdrop:backdrop-blur-sm"
+        className="fixed top-1/2 left-1/2 m-0 w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-card p-0 text-foreground shadow-lg backdrop:bg-black/20 backdrop:backdrop-blur-sm"
       >
         <form ref={formRef} onSubmit={handleSubmit} className="space-y-4 p-5">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold text-ink">Log a manual comment</h2>
-            <p className="text-xs text-ink-muted">
+            <h2 className="text-sm font-semibold text-foreground">Log a manual comment</h2>
+            <p className="text-xs text-muted-foreground">
               For a reply posted on a thread we never ingested or classified — paste the link and
               the comment, credit who posted it, and it counts toward this company&apos;s metrics
               just like an AI-assisted reply.
@@ -93,6 +96,27 @@ export function ManualCommentDialog({
               ))}
             </Select>
           </Field>
+
+          {accounts.length > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Reddit account" htmlFor="manual-reddit-account">
+                <Select id="manual-reddit-account" name="reddit_account_id" defaultValue="">
+                  <option value="">No account tracked</option>
+                  {accounts.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      u/{a.account_name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Type" htmlFor="manual-comment-type">
+                <Select id="manual-comment-type" name="comment_type" defaultValue="generic">
+                  <option value="generic">Generic</option>
+                  <option value="target">Target (mentions/contributes)</option>
+                </Select>
+              </Field>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2">
             <button type="button" className={buttonClass("ghost", "sm")} onClick={close}>

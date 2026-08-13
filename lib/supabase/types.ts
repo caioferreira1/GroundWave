@@ -79,6 +79,12 @@ export type Database = {
           posts_last_error_at: string | null;
           posts_retry_pending: boolean;
           inbound_webhook_token: string;
+          activity_generic_comments_min: number;
+          activity_generic_comments_max: number;
+          activity_target_comments_min: number;
+          activity_target_comments_max: number;
+          activity_generic_post_interval_days: number;
+          activity_company_post_per_week: number;
           created_at: string;
           updated_at: string;
         };
@@ -86,6 +92,25 @@ export type Database = {
           name: string;
         };
         Update: Partial<Database["public"]["Tables"]["companies"]["Row"]>;
+        Relationships: [];
+      };
+      reddit_accounts: {
+        Row: {
+          id: string;
+          company_id: string;
+          account_name: string;
+          karma: number;
+          owner_user_id: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["reddit_accounts"]["Row"]> & {
+          company_id: string;
+          account_name: string;
+          owner_user_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["reddit_accounts"]["Row"]>;
         Relationships: [];
       };
       apify_runs: {
@@ -113,27 +138,6 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["apify_runs"]["Row"]>;
         Relationships: [];
       };
-      personas: {
-        Row: {
-          id: string;
-          company_id: string;
-          slug: string;
-          display_name: string;
-          content_md: string;
-          based_on_fichas: string[];
-          is_active: boolean;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: Partial<Database["public"]["Tables"]["personas"]["Row"]> & {
-          company_id: string;
-          slug: string;
-          display_name: string;
-          content_md: string;
-        };
-        Update: Partial<Database["public"]["Tables"]["personas"]["Row"]>;
-        Relationships: [];
-      };
       posts: {
         Row: {
           id: string;
@@ -154,13 +158,13 @@ export type Database = {
           human_verdict_by: string | null;
           human_verdict_at: string | null;
           generated_comment: string | null;
-          generated_comment_persona_id: string | null;
-          generated_comment_persona_rationale: string | null;
           comment_generated_at: string | null;
           comment_posted_at: string | null;
           comment_posted_by: string | null;
           comment_views_count: number | null;
           is_manual: boolean;
+          reddit_account_id: string | null;
+          comment_type: "generic" | "target" | null;
           created_at: string;
           updated_at: string;
         };
@@ -192,8 +196,6 @@ export type Database = {
           id: string;
           company_id: string | null;
           mode: "company" | "generic";
-          persona_id: string | null;
-          persona_rationale: string | null;
           subreddit: string;
           theme: string;
           title: string;
@@ -202,6 +204,8 @@ export type Database = {
           posted_at: string | null;
           posted_by: string | null;
           views_count: number | null;
+          reddit_account_id: string | null;
+          post_type: "generic" | "company_mention" | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["post_generations"]["Row"]> & {

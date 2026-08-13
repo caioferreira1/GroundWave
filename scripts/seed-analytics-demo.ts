@@ -6,9 +6,8 @@
 //   npm run seed-analytics-demo -- --company-id <uuid>
 //   npm run seed-analytics-demo -- --company-id <uuid> --cleanup
 //
-// Same client-construction pattern as scripts/import-personas.ts (own
-// service-role client — lib/supabase/admin.ts is "server-only" and can't be
-// imported outside Next's bundler).
+// Own service-role client — lib/supabase/admin.ts is "server-only" and can't
+// be imported outside Next's bundler.
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";

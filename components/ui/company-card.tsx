@@ -42,14 +42,14 @@ export function CompanyCard({
     >
       <Avatar name={name} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-ink">{name}</p>
+        <p className="truncate text-sm font-medium text-foreground">{name}</p>
         {websiteUrl && (
           <a
             href={websiteUrl}
             target="_blank"
             rel="noreferrer"
             onClick={(e: MouseEvent) => e.stopPropagation()}
-            className="text-xs text-ink-muted hover:text-accent hover:underline"
+            className="text-xs text-muted-foreground hover:text-primary hover:underline"
           >
             Link
           </a>

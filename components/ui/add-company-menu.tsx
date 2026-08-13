@@ -35,7 +35,7 @@ export function AddCompanyMenu({
         <Plus className="h-4 w-4" /> Add company
       </Button>
       {open && (
-        <div className="absolute top-full right-0 z-20 mt-2 w-72 rounded-lg border border-border bg-surface p-4 shadow-md">
+        <div className="absolute top-full right-0 z-20 mt-2 w-72 rounded-lg border border-border bg-card p-4 shadow-md">
           <form action={action} onSubmit={() => setOpen(false)} className="space-y-3">
             <Field label="Name" htmlFor="add-company-name">
               <Input id="add-company-name" name="name" required autoFocus />

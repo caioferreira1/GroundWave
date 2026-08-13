@@ -2,19 +2,12 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { callAiGateway, parseJsonResponse } from "@/lib/ai/gateway";
 import { POST_GENERATOR_SUBREDDITS } from "@/lib/reddit/subreddits";
-import {
-  ANTI_IMPERSONATION_NOTE,
-  cleanComment,
-  personaBriefing,
-  type PersonaRow,
-} from "@/lib/ai/reply-generator";
+import { cleanComment } from "@/lib/ai/reply-generator";
 
 export interface GeneratedPostGeneration {
   id: string;
   companyId: string | null;
   mode: "generic" | "company";
-  personaId: string | null;
-  personaRationale: string | null;
   subreddit: string;
   theme: string;
   title: string;
@@ -57,18 +50,11 @@ This post is for "${companyName}". Roughly one in three to four posts, mention i
 }
 
 /**
- * Shared between both modes: with no guardrails/personas it's exactly the
- * generic-mode prompt; with them, it layers brand guardrails and an optional
- * persona catalog on top — same shape as reply-generator's buildSystemPrompt,
- * except there's no manual persona override here (nothing to override yet,
- * this is the first draft of the post, not a reply to review).
+ * Shared between both modes: with no guardrails it's exactly the
+ * generic-mode prompt; with them, it layers brand guardrails on top.
  */
-function buildSystemPrompt(params: {
-  guardrailsMd: string | null;
-  personas: PersonaRow[];
-  companyName: string | null;
-}): string {
-  const { guardrailsMd, personas, companyName } = params;
+function buildSystemPrompt(params: { guardrailsMd: string | null; companyName: string | null }): string {
+  const { guardrailsMd, companyName } = params;
 
   const guardrailsBlock = guardrailsMd
     ? `\n\nBRAND GUARDRAILS (mandatory — tone rules and any required disclaimers):\n${guardrailsMd}`
@@ -76,32 +62,18 @@ function buildSystemPrompt(params: {
 
   const mentionBlock = companyName ? buildMentionBlock(companyName) : "";
 
-  let personaBlock = "";
-  if (personas.length > 0) {
-    const catalog = personas
-      .map((p) => `- [${p.id}] ${p.display_name}\n${personaBriefing(p)}`)
-      .join("\n\n");
-    personaBlock = `\n\nTARGET READER PROFILES (choose the ONE whose voice/vocabulary best fits this post, then write in that voice; pick null if none fit):\n${catalog}\n\n${ANTI_IMPERSONATION_NOTE}`;
-  }
-
-  const outputSchema =
-    personas.length > 0
-      ? `{"personaId":"<one of the ids above, or null if none fit>","rationale":"one short sentence on why this reader profile fits","theme":"...","title":"...","body":"..."}`
-      : `{"theme":"...","title":"...","body":"..."}`;
-
-  return `${POST_HARD_RULES}${guardrailsBlock}${mentionBlock}${personaBlock}
+  return `${POST_HARD_RULES}${guardrailsBlock}${mentionBlock}
 
 OUTPUT:
-Reply ONLY with valid JSON, no extra text, no markdown fences: ${outputSchema}`;
+Reply ONLY with valid JSON, no extra text, no markdown fences: {"theme":"...","title":"...","body":"..."}`;
 }
 
 /**
  * Generates one original Reddit post and writes it straight to
  * `post_generations` (mirrors generateReply's pattern of owning both the AI
  * call and the write). Generic mode picks from a fixed subreddit list and
- * skips persona/guardrails entirely; company mode picks from the company's
- * suggested subreddits and layers in guardrails + best-fit active persona,
- * same as the reply generator.
+ * skips guardrails entirely; company mode picks from the company's suggested
+ * subreddits and layers in guardrails.
  */
 export async function generatePostGeneration(
   opts: { mode: "generic"; createdBy: string } | { mode: "company"; companyId: string; createdBy: string },
@@ -112,7 +84,6 @@ export async function generatePostGeneration(
   let subreddit: string;
   let guardrailsMd: string | null = null;
   let companyName: string | null = null;
-  let personas: PersonaRow[] = [];
 
   if (opts.mode === "company") {
     companyId = opts.companyId;
@@ -132,21 +103,12 @@ export async function generatePostGeneration(
     companyName = company.name;
     subreddit =
       company.suggested_subreddits[Math.floor(Math.random() * company.suggested_subreddits.length)];
-
-    const { data: personaRows, error: personaError } = await admin
-      .from("personas")
-      .select("id, display_name, content_md")
-      .eq("company_id", opts.companyId)
-      .eq("is_active", true)
-      .order("display_name", { ascending: true });
-    if (personaError) throw new Error(personaError.message);
-    personas = personaRows ?? [];
   } else {
     subreddit = POST_GENERATOR_SUBREDDITS[Math.floor(Math.random() * POST_GENERATOR_SUBREDDITS.length)];
   }
 
   const nonce = Math.random().toString(36).slice(2, 10);
-  const systemPrompt = buildSystemPrompt({ guardrailsMd, personas, companyName });
+  const systemPrompt = buildSystemPrompt({ guardrailsMd, companyName });
   const userPrompt = `Subreddit: r/${subreddit}\nVariation nonce: ${nonce}`;
 
   const raw = await callAiGateway({
@@ -159,8 +121,6 @@ export async function generatePostGeneration(
   });
 
   const parsed = parseJsonResponse<{
-    personaId?: string | null;
-    rationale?: string;
     theme?: string;
     title?: string;
     body?: string;
@@ -171,16 +131,11 @@ export async function generatePostGeneration(
   const body = cleanComment(String(parsed.body ?? ""));
   if (!theme || !title || !body) throw new Error("AI response missing theme, title or body");
 
-  const personaId = personas.find((p) => p.id === parsed.personaId)?.id ?? null;
-  const personaRationale = personaId ? String(parsed.rationale ?? "").slice(0, 500) || null : null;
-
   const { data: row, error: insertError } = await admin
     .from("post_generations")
     .insert({
       company_id: companyId,
       mode: opts.mode,
-      persona_id: personaId,
-      persona_rationale: personaRationale,
       subreddit,
       theme,
       title,
@@ -195,8 +150,6 @@ export async function generatePostGeneration(
     id: row.id,
     companyId: row.company_id,
     mode: row.mode,
-    personaId: row.persona_id,
-    personaRationale: row.persona_rationale,
     subreddit: row.subreddit,
     theme: row.theme,
     title: row.title,

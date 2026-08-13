@@ -12,12 +12,10 @@ export function TrendDualAreaChart({
   data,
   series,
   stacked = false,
-  glow = false,
 }: {
   data: Record<string, string | number>[];
   series: [SeriesSpec, SeriesSpec];
   stacked?: boolean;
-  glow?: boolean;
 }) {
-  return <TrendChart data={data} series={series} stacked={stacked} glow={glow} />;
+  return <TrendChart data={data} series={series} stacked={stacked} />;
 }

@@ -18,8 +18,8 @@ export function StatCard({
 }) {
   return (
     <Card interactive className={cx("p-4", className)}>
-      <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-ink-muted uppercase">
-        <span className="bg-accent flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-white">
+      <div className="flex items-center gap-2 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+        <span className="bg-primary flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-primary-foreground">
           <Icon className="h-3.5 w-3.5" strokeWidth={2} />
         </span>
         {label}

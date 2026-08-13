@@ -2,7 +2,6 @@ import { requireApprovedUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { abbreviateName } from "@/lib/format-name";
 import {
-  Button,
   Card,
   CardContent,
   CardHeader,
@@ -10,6 +9,7 @@ import {
   Field,
   Input,
   PageHeading,
+  SubmitButton,
 } from "@/components/ui";
 import { updateOwnProfile } from "./actions";
 
@@ -52,7 +52,7 @@ export default async function AccountPage() {
             <Field label="Job title (optional)" htmlFor="job_title">
               <Input id="job_title" name="job_title" defaultValue={profile?.job_title ?? ""} />
             </Field>
-            <Button type="submit">Save changes</Button>
+            <SubmitButton pendingText="Saving…">Save changes</SubmitButton>
           </CardContent>
         </form>
       </Card>

@@ -3,14 +3,14 @@ import { cx } from "@/lib/cx";
 
 export function Table({ className, ...props }: HTMLAttributes<HTMLTableElement>) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border bg-surface shadow-xs">
+    <div className="overflow-x-auto rounded-lg border border-border bg-card shadow-xs">
       <table className={cx("w-full text-left text-sm", className)} {...props} />
     </div>
   );
 }
 
 export function TableHeader({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
-  return <thead className={cx("bg-surface-muted text-ink-muted", className)} {...props} />;
+  return <thead className={cx("bg-secondary text-muted-foreground", className)} {...props} />;
 }
 
 export function TableBody({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
@@ -21,7 +21,7 @@ export function TableRow({ className, ...props }: HTMLAttributes<HTMLTableRowEle
   return (
     <tr
       className={cx(
-        "border-t border-border transition-colors duration-150 hover:bg-surface-muted/60",
+        "border-t border-border transition-colors duration-150 hover:bg-secondary/60",
         className,
       )}
       {...props}

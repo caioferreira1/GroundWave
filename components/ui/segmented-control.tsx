@@ -1,5 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, HTMLAttributes } from "react";
+import { useFormStatus } from "react-dom";
 import { cx } from "@/lib/cx";
 
 export function SegmentedControl({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
@@ -7,7 +10,7 @@ export function SegmentedControl({ className, ...props }: HTMLAttributes<HTMLDiv
     <div
       role="tablist"
       className={cx(
-        "inline-flex items-center gap-0.5 rounded-md border border-border bg-surface-muted p-1",
+        "inline-flex items-center gap-0.5 rounded-md border border-border bg-secondary p-1",
         className,
       )}
       {...props}
@@ -18,7 +21,7 @@ export function SegmentedControl({ className, ...props }: HTMLAttributes<HTMLDiv
 function itemClass(active?: boolean) {
   return cx(
     "rounded-md px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-colors duration-150",
-    active ? "bg-surface text-ink shadow-xs" : "text-ink-muted hover:text-ink",
+    active ? "bg-card text-foreground shadow-xs" : "text-muted-foreground hover:text-foreground",
   );
 }
 
@@ -33,19 +36,33 @@ export function SegmentedControlLink({
   );
 }
 
-/** Form-submit variant — for a `<button type="submit">` nested in a server-action `<form>`. */
+/**
+ * Form-submit variant — for a `<button type="submit">` nested in a
+ * server-action `<form>`. useFormStatus reads the nearest ancestor <form>
+ * (harmlessly reports pending: false when there isn't one, e.g. the plain
+ * type="button" mode-toggle usage on the login page) so this dims itself
+ * while its own submission is in flight.
+ */
 export function SegmentedControlButton({
   active,
   className,
+  disabled,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & { active?: boolean }) {
+  const { pending } = useFormStatus();
   return (
     <button
       type="submit"
       role="tab"
       aria-selected={active}
-      disabled={active}
-      className={cx(itemClass(active), active && "cursor-default", className)}
+      disabled={active || disabled || pending}
+      aria-busy={pending}
+      className={cx(
+        itemClass(active),
+        active && "cursor-default",
+        pending && "opacity-50",
+        className,
+      )}
       {...props}
     />
   );

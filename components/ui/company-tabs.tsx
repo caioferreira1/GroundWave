@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Drama, Gauge, MessagesSquare, Settings, Sparkles, type LucideIcon } from "lucide-react";
+import { Gauge, MessagesSquare, Settings, Sparkles, Users, type LucideIcon } from "lucide-react";
 import { cx } from "@/lib/cx";
 import { buttonClass } from "./button";
 import { SegmentedControl, SegmentedControlLink } from "./segmented-control";
@@ -10,8 +10,8 @@ import { SegmentedControl, SegmentedControlLink } from "./segmented-control";
 const tabs: { label: string; icon: LucideIcon; suffix: string }[] = [
   { label: "Overview", icon: Gauge, suffix: "" },
   { label: "Posts", icon: MessagesSquare, suffix: "/posts" },
-  { label: "Personas", icon: Drama, suffix: "/personas" },
   { label: "Post Generator", icon: Sparkles, suffix: "/post-generator" },
+  { label: "Accounts", icon: Users, suffix: "/accounts" },
 ];
 
 export function CompanyTabs({ companyId }: { companyId: string }) {
@@ -40,7 +40,7 @@ export function CompanyTabs({ companyId }: { companyId: string }) {
         title="Settings"
         className={cx(
           buttonClass("ghost", "icon"),
-          settingsActive && "bg-accent-soft text-accent-strong",
+          settingsActive && "bg-accent text-accent-foreground",
         )}
       >
         <Settings className="h-4 w-4" strokeWidth={2} />

@@ -1,9 +1,53 @@
 "use server";
 
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { requireStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { generateReply } from "@/lib/ai/reply-generator";
+import { dispatchCompanyIngestion, type IngestCompany } from "@/lib/reddit/ingest";
+
+/**
+ * Dispatches the Apify Reddit scraper for this company in the background —
+ * same code path as the daily cron. A real run takes a few minutes and
+ * finishes later via the webhook (lib/reddit/ingest.ts::completeCompanyIngestion),
+ * so this only kicks it off and revalidates; no redirect, staff stays on the
+ * Posts page they triggered it from.
+ */
+export async function runIngestionNow(companyId: string) {
+  await requireStaff();
+
+  const supabase = await createClient();
+  const { data: company, error } = await supabase
+    .from("companies")
+    .select(
+      "id, suggested_subreddits, search_keywords, posts_min_upvotes, posts_sort, posts_time_window, posts_max_per_run",
+    )
+    .eq("id", companyId)
+    .single();
+  if (error) throw new Error(error.message);
+
+  const webhookSecret = process.env.APIFY_WEBHOOK_SECRET;
+  if (!webhookSecret) throw new Error("APIFY_WEBHOOK_SECRET is not configured.");
+  const hdrs = await headers();
+  const host = hdrs.get("host") ?? "localhost:3000";
+  const proto = hdrs.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  const webhookUrl = `${proto}://${host}/api/webhooks/apify-run-complete?secret=${encodeURIComponent(webhookSecret)}`;
+
+  // Errors here mean the run couldn't even be started (e.g. bad token);
+  // those are persisted to companies.posts_last_error by
+  // dispatchCompanyIngestion itself — swallow here so a failed dispatch
+  // doesn't crash the page, staff just sees it on the Overview tab.
+  try {
+    await dispatchCompanyIngestion(company as IngestCompany, webhookUrl, { scheduled: false });
+  } catch (e) {
+    console.error("[runIngestionNow] failed", e);
+  }
+
+  revalidatePath(`/companies/${companyId}`);
+  revalidatePath(`/companies/${companyId}/posts`);
+  revalidatePath(`/companies/${companyId}/settings`);
+}
 
 /**
  * Records the staff verdict on a post's relevance and always logs it as a
@@ -43,16 +87,11 @@ export async function setHumanVerdict(
   revalidatePath(`/companies/${companyId}/posts`);
 }
 
-/**
- * Runs the persona-aware reply generator for one post. `formData.persona_id`
- * is an optional manual override (empty string = let the AI pick from the
- * company's active persona catalog).
- */
-export async function generateComment(companyId: string, postId: string, formData: FormData) {
+/** Runs the reply generator for one post. */
+export async function generateComment(companyId: string, postId: string) {
   await requireStaff();
 
-  const personaId = String(formData.get("persona_id") ?? "").trim() || undefined;
-  await generateReply(postId, personaId ? { personaId } : undefined);
+  await generateReply(postId);
 
   revalidatePath(`/companies/${companyId}/posts`);
 }
@@ -74,15 +113,27 @@ export async function saveGeneratedComment(companyId: string, postId: string, fo
   revalidatePath(`/companies/${companyId}/posts`);
 }
 
+/** Reads the optional reddit_account_id/comment_type fields shared by markCommentPosted and addManualComment. */
+function readActivityTagging(formData: FormData): { redditAccountId: string | null; commentType: "generic" | "target" | null } {
+  const redditAccountId = String(formData.get("reddit_account_id") ?? "").trim() || null;
+  const commentTypeRaw = String(formData.get("comment_type") ?? "").trim();
+  const commentType: "generic" | "target" | null =
+    commentTypeRaw === "generic" || commentTypeRaw === "target" ? commentTypeRaw : null;
+  return { redditAccountId, commentType };
+}
+
 /**
  * The poster is a manual choice (formData.posted_by), not necessarily the
  * staff member clicking the button — someone else's Reddit account may have
  * been used to post the reply. Recorded for future per-poster metrics.
+ * reddit_account_id/comment_type are optional (companies with no registered
+ * accounts yet can still mark comments posted) — left null when not chosen.
  */
 export async function markCommentPosted(companyId: string, postId: string, formData: FormData) {
   const { user } = await requireStaff();
 
   const postedBy = String(formData.get("posted_by") ?? "").trim() || user.id;
+  const { redditAccountId, commentType } = readActivityTagging(formData);
 
   const supabase = await createClient();
   const { data: posterRoles, error: roleError } = await supabase
@@ -95,11 +146,17 @@ export async function markCommentPosted(companyId: string, postId: string, formD
 
   const { error } = await supabase
     .from("posts")
-    .update({ comment_posted_at: new Date().toISOString(), comment_posted_by: postedBy })
+    .update({
+      comment_posted_at: new Date().toISOString(),
+      comment_posted_by: postedBy,
+      reddit_account_id: redditAccountId,
+      comment_type: commentType,
+    })
     .eq("id", postId);
   if (error) throw new Error(error.message);
 
   revalidatePath(`/companies/${companyId}/posts`);
+  revalidatePath(`/companies/${companyId}`);
 }
 
 /**
@@ -118,6 +175,7 @@ export async function addManualComment(companyId: string, formData: FormData) {
   const url = String(formData.get("url") ?? "").trim();
   const comment = String(formData.get("comment") ?? "").trim();
   const postedBy = String(formData.get("posted_by") ?? "").trim() || user.id;
+  const { redditAccountId, commentType } = readActivityTagging(formData);
   if (!url) throw new Error("Reddit post URL is required");
   if (!comment) throw new Error("Comment is required");
 
@@ -144,10 +202,13 @@ export async function addManualComment(companyId: string, formData: FormData) {
     comment_generated_at: now,
     comment_posted_at: now,
     comment_posted_by: postedBy,
+    reddit_account_id: redditAccountId,
+    comment_type: commentType,
   });
   if (error) throw new Error(error.message);
 
   revalidatePath(`/companies/${companyId}/posts`);
+  revalidatePath(`/companies/${companyId}`);
 }
 
 export async function unmarkCommentPosted(companyId: string, postId: string) {

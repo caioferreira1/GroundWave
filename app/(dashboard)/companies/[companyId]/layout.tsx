@@ -26,13 +26,13 @@ export default async function CompanyLayout({
       <div className="flex items-center gap-2.5">
         <Avatar name={company.name} size="sm" />
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-ink">{company.name}</p>
+          <p className="truncate text-sm font-semibold text-foreground">{company.name}</p>
           {company.website_url && (
             <Link
               href={company.website_url}
               target="_blank"
               rel="noreferrer"
-              className="text-xs text-ink-muted hover:text-accent hover:underline"
+              className="text-xs text-muted-foreground hover:text-primary hover:underline"
             >
               Link
             </Link>

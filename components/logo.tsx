@@ -1,37 +1,27 @@
-/**
- * Wordmark for GroundWave Hub. The glyph is a transmitter with arcs that
- * curve down to hug the baseline — a "ground wave" (a radio signal that
- * follows the earth's surface to reach further) rather than a generic
- * signal/wifi icon.
- */
+/** Wordmark for GroundWave Hub — a thin wave line with a coral tip. */
 export function Logo({ size = 22 }: { size?: number }) {
   return (
     <span className="inline-flex items-center gap-2">
       <svg
         width={size}
-        height={size}
-        viewBox="0 0 32 32"
+        height={(size * 18) / 28}
+        viewBox="0 0 28 18"
         fill="none"
         aria-hidden="true"
       >
-        <line x1="4" y1="24" x2="28" y2="24" stroke="var(--border)" strokeWidth="1.5" />
-        <circle cx="7" cy="24" r="2.25" fill="var(--accent)" />
         <path
-          d="M11 24C13.5 24 14.5 19 17 19C19.5 19 20.5 24 23 24"
-          stroke="var(--accent)"
-          strokeWidth="1.75"
+          d="M2.5 12.8C4.4 12.8 5.7 6.6 8.9 6.6S13.4 12.4 16.3 12 20.5 5.6 23 5.6"
+          stroke="currentColor"
+          strokeWidth="1.8"
           strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-foreground"
         />
-        <path
-          d="M11 24C15 24 16 13.5 21 13.5C26 13.5 24 24 23 24"
-          stroke="var(--accent-2)"
-          strokeOpacity="0.6"
-          strokeWidth="1.75"
-          strokeLinecap="round"
-        />
+        <circle cx="23" cy="5.6" r="2.5" fill="var(--primary)" />
       </svg>
-      <span className="font-semibold tracking-tight text-ink">
-        GroundWave <span className="text-ink-muted font-normal">Hub</span>
+      <span className="text-lg font-bold tracking-tight">
+        <span className="text-foreground">Ground</span>
+        <span className="text-primary">Wave</span>
       </span>
     </span>
   );

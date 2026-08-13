@@ -14,7 +14,7 @@ export default async function CompaniesPage() {
     <div className="space-y-10">
       <PageHeading
         title="Companies"
-        description="Each company gets its own Reddit monitoring, personas, and generated content."
+        description="Each company gets its own Reddit monitoring and generated content."
         action={<AddCompanyMenu action={createCompany} />}
       />
 

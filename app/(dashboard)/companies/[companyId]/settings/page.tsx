@@ -1,13 +1,10 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { getApifyAccountUsage } from "@/lib/reddit/apify";
 import {
-  Button,
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
   CopyButton,
@@ -15,10 +12,11 @@ import {
   Input,
   PageHeading,
   Select,
+  SubmitButton,
   Switch,
   Textarea,
 } from "@/components/ui";
-import { regenerateWebhookToken, runIngestionNow, updateCompanySettings } from "./actions";
+import { regenerateWebhookToken, updateCompanySettings } from "./actions";
 
 export default async function CompanySettingsPage({
   params,
@@ -37,22 +35,6 @@ export default async function CompanySettingsPage({
 
   if (!company) notFound();
 
-  const { data: lastRun } = await supabase
-    .from("apify_runs")
-    .select("cost_usd, item_count, status")
-    .eq("company_id", companyId)
-    .order("started_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  let usage: Awaited<ReturnType<typeof getApifyAccountUsage>> | null = null;
-  try {
-    usage = await getApifyAccountUsage();
-  } catch {
-    // APIFY_TOKEN missing/invalid or the API is down — show "unavailable"
-    // instead of breaking the whole Settings page over a discreet badge.
-  }
-
   const hdrs = await headers();
   const host = hdrs.get("host") ?? "localhost:3000";
   const proto = hdrs.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
@@ -60,7 +42,6 @@ export default async function CompanySettingsPage({
 
   const updateAction = updateCompanySettings.bind(null, companyId);
   const regenerateAction = regenerateWebhookToken.bind(null, companyId);
-  const runNowAction = runIngestionNow.bind(null, companyId);
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -210,7 +191,7 @@ export default async function CompanySettingsPage({
           </CardContent>
         </Card>
 
-        <Button type="submit">Save settings</Button>
+        <SubmitButton pendingText="Saving…">Save settings</SubmitButton>
       </form>
 
       <Card>
@@ -228,33 +209,11 @@ export default async function CompanySettingsPage({
             <CopyButton value={webhookUrl} />
           </div>
           <form action={regenerateAction}>
-            <Button type="submit" variant="secondary" size="sm">
+            <SubmitButton variant="secondary" size="sm" pendingText="Regenerating…">
               Regenerate token
-            </Button>
+            </SubmitButton>
           </form>
         </CardContent>
-        <CardFooter className="flex-col items-stretch gap-3">
-          <CardDescription>
-            Starts the Apify Reddit scraper for this company in the background (uses real Apify
-            credits) — same code path as the daily cron. A real run takes a few minutes; results
-            and cost show up below once it finishes, no need to wait on this page.
-          </CardDescription>
-          <form action={runNowAction}>
-            <Button type="submit" variant="secondary" size="sm">
-              Run ingestion now
-            </Button>
-          </form>
-          <CardDescription className="font-mono text-xs">
-            {lastRun
-              ? lastRun.status === "RUNNING"
-                ? "Last run: in progress… · "
-                : `Last run: $${lastRun.cost_usd.toFixed(2)} (${lastRun.item_count} posts) · `
-              : ""}
-            {usage
-              ? `Apify: $${usage.spentUsd.toFixed(2)}${usage.limitUsd ? ` / $${usage.limitUsd.toFixed(2)}` : ""} this month`
-              : "Apify usage unavailable"}
-          </CardDescription>
-        </CardFooter>
       </Card>
     </div>
   );
