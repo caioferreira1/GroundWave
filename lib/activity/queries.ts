@@ -1,6 +1,6 @@
 import type { createClient } from "@/lib/supabase/server";
 import { weekWindowStartIso } from "@/lib/analytics/bucket";
-import type { WeekActivity } from "./rotation";
+import type { DailyActivity, WeekActivity } from "./rotation";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -76,6 +76,62 @@ export async function getWeekActivityForRotation(
   }
 
   return { commentsByAccount, postsByAccount, lastGenericPostAt, lastCompanyMentionPostAt };
+}
+
+/**
+ * Real tagged activity (reddit_account_id + comment_type/post_type) posted
+ * specifically on `taskDate` — day-scoped, unlike getWeekActivityForRotation's
+ * week window. Feeds lib/activity/rotation.ts's computeAutoCompletedKeys(),
+ * which auto-checks a Today's tasks chip once today's real activity covers
+ * what's being asked. Never folded into mergeActivity()/the weekly meters —
+ * that data already flows in via getWeekActivityForRotation, so counting it
+ * again here would double it.
+ */
+export async function getTodaysRealActivity(
+  supabase: SupabaseServerClient,
+  companyId: string,
+  taskDate: string,
+): Promise<DailyActivity> {
+  const startIso = `${taskDate}T00:00:00.000Z`;
+  const endIso = new Date(new Date(startIso).getTime() + 24 * 60 * 60 * 1000).toISOString();
+
+  const [{ data: todaysComments }, { data: todaysPosts }] = await Promise.all([
+    supabase
+      .from("posts")
+      .select("reddit_account_id, comment_type")
+      .eq("company_id", companyId)
+      .not("reddit_account_id", "is", null)
+      .gte("comment_posted_at", startIso)
+      .lt("comment_posted_at", endIso),
+    supabase
+      .from("post_generations")
+      .select("reddit_account_id, post_type")
+      .eq("company_id", companyId)
+      .eq("mode", "company")
+      .not("reddit_account_id", "is", null)
+      .gte("posted_at", startIso)
+      .lt("posted_at", endIso),
+  ]);
+
+  const comments = new Map<string, { generic: number; target: number }>();
+  for (const row of todaysComments ?? []) {
+    if (!row.reddit_account_id) continue;
+    const entry = comments.get(row.reddit_account_id) ?? { generic: 0, target: 0 };
+    if (row.comment_type === "generic") entry.generic += 1;
+    else if (row.comment_type === "target") entry.target += 1;
+    comments.set(row.reddit_account_id, entry);
+  }
+
+  const posts = new Map<string, { generic: number; company_mention: number }>();
+  for (const row of todaysPosts ?? []) {
+    if (!row.reddit_account_id) continue;
+    const entry = posts.get(row.reddit_account_id) ?? { generic: 0, company_mention: 0 };
+    if (row.post_type === "generic") entry.generic += 1;
+    else if (row.post_type === "company_mention") entry.company_mention += 1;
+    posts.set(row.reddit_account_id, entry);
+  }
+
+  return { comments, posts };
 }
 
 /**

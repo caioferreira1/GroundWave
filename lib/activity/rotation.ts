@@ -250,6 +250,52 @@ export function taskItems(account: AccountDailyTask): { key: DailyTaskKey; label
   return items;
 }
 
+/** Real tagged activity (reddit_account_id + comment_type/post_type) posted on one specific day — see lib/activity/queries.ts::getTodaysRealActivity(). */
+export type DailyActivity = {
+  comments: Map<string, { generic: number; target: number }>;
+  posts: Map<string, { generic: number; company_mention: number }>;
+};
+
+function realCountForTask(accountId: string, key: DailyTaskKey, activity: DailyActivity): number {
+  switch (key) {
+    case "generic_post":
+      return activity.posts.get(accountId)?.generic ?? 0;
+    case "company_mention_post":
+      return activity.posts.get(accountId)?.company_mention ?? 0;
+    case "generic_comments":
+      return activity.comments.get(accountId)?.generic ?? 0;
+    case "target_comments":
+      return activity.comments.get(accountId)?.target ?? 0;
+  }
+}
+
+/**
+ * Which Today's tasks chips are already satisfied by real tagged activity
+ * logged today — e.g. a target comment marked posted with the right account
+ * today auto-satisfies that day's "target comments" chip without anyone
+ * touching the checkbox. Compares each chip's already-computed `count`
+ * (which is the remaining ask for today, itself already net of this week's
+ * real activity via mergeActivity() upstream) against how much of that
+ * specific type was logged for real *today* — once today's real count
+ * catches up to what's still being asked, the chip is done.
+ *
+ * Deliberately never written back to daily_task_completions: doing so would
+ * double-count in mergeActivity() (see that function's caller in page.tsx).
+ * This is a read-only, render-time overlay on top of computeAccountDailyTasks's
+ * output.
+ */
+export function computeAutoCompletedKeys(dailyTasks: AccountDailyTask[], todaysActivity: DailyActivity): Set<string> {
+  const result = new Set<string>();
+  for (const task of dailyTasks) {
+    for (const item of taskItems(task)) {
+      if (realCountForTask(task.accountId, item.key, todaysActivity) >= item.count) {
+        result.add(`${task.accountId}:${item.key}`);
+      }
+    }
+  }
+  return result;
+}
+
 /** Groups each account's daily task into its owning collaborator's list — no summing, so "which account needs what" stays visible. */
 export function groupTasksByCollaborator(
   tasks: AccountDailyTask[],

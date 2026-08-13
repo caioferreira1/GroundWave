@@ -24,6 +24,15 @@ export type WeeklyGoalSummary = {
  * separate completion flag. Tasks are shown per account (not summed per
  * person) so it's clear which account needs what.
  *
+ * A third source, `autoCompletedKeys` (lib/activity/rotation.ts's
+ * computeAutoCompletedKeys()), auto-checks a chip when today's real tagged
+ * activity alone already covers it — e.g. mark a comment posted with the
+ * right account + "target" type, and that account's "target comments" chip
+ * checks itself off. Read-only: it's never written to
+ * daily_task_completions, since the underlying activity is already counted
+ * once via mergeActivity(). See TodaysTaskList for how it renders (checked
+ * and locked, not togglable).
+ *
  * The meters up top and the checklist below still answer two different
  * questions at two different grains — "how's the week going" (aggregate)
  * vs "what does each account owe today" (per-account) — so they stay
@@ -38,6 +47,7 @@ export function TodaysTasksCard({
   hasActiveAccounts,
   taskDate,
   initialCompletions,
+  autoCompletedKeys,
   toggleTask,
 }: {
   goals: WeeklyGoalSummary;
@@ -47,6 +57,7 @@ export function TodaysTasksCard({
   hasActiveAccounts: boolean;
   taskDate: string;
   initialCompletions: Set<string>;
+  autoCompletedKeys: Set<string>;
   toggleTask: (
     redditAccountId: string,
     taskKey: DailyTaskKey,
@@ -125,6 +136,7 @@ export function TodaysTasksCard({
                 nameByOwner={nameByOwner}
                 taskDate={taskDate}
                 initialCompletions={initialCompletions}
+                autoCompletedKeys={autoCompletedKeys}
                 toggleTask={toggleTask}
               />
             </div>

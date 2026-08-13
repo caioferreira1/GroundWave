@@ -14,12 +14,14 @@ export function TodaysTaskList({
   nameByOwner,
   taskDate,
   initialCompletions,
+  autoCompletedKeys,
   toggleTask,
 }: {
   collaboratorTasks: CollaboratorTasks[];
   nameByOwner: Map<string, string>;
   taskDate: string;
   initialCompletions: Set<string>;
+  autoCompletedKeys: Set<string>;
   toggleTask: (
     redditAccountId: string,
     taskKey: DailyTaskKey,
@@ -30,6 +32,11 @@ export function TodaysTaskList({
 }) {
   const [completed, setCompleted] = useState(initialCompletions);
   const [, startTransition] = useTransition();
+
+  function isDone(accountId: string, taskKey: DailyTaskKey): boolean {
+    const key = completionKey(accountId, taskKey);
+    return completed.has(key) || autoCompletedKeys.has(key);
+  }
 
   function handleToggle(accountId: string, taskKey: DailyTaskKey, count: number, next: boolean) {
     const key = completionKey(accountId, taskKey);
@@ -65,8 +72,7 @@ export function TodaysTaskList({
 
         const totalTasks = accountsWithTasks.reduce((sum, { items }) => sum + items.length, 0);
         const doneTasks = accountsWithTasks.reduce(
-          (sum, { account, items }) =>
-            sum + items.filter((item) => completed.has(completionKey(account.accountId, item.key))).length,
+          (sum, { account, items }) => sum + items.filter((item) => isDone(account.accountId, item.key)).length,
           0,
         );
 
@@ -96,16 +102,23 @@ export function TodaysTaskList({
                     <ul className="space-y-1">
                       {items.map((item) => {
                         const key = completionKey(account.accountId, item.key);
-                        const isDone = completed.has(key);
+                        const isAuto = autoCompletedKeys.has(key);
+                        const done = isAuto || completed.has(key);
                         return (
                           <li key={item.key}>
                             <Checkbox
                               id={`task-${key}`}
-                              checked={isDone}
+                              checked={done}
+                              disabled={isAuto}
                               onChange={(e) => handleToggle(account.accountId, item.key, item.count, e.target.checked)}
                               label={
-                                <span className={isDone ? "text-muted-foreground line-through" : "text-foreground"}>
+                                <span className={done ? "text-muted-foreground line-through" : "text-foreground"}>
                                   {item.label}
+                                  {isAuto && (
+                                    <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wide text-primary no-underline">
+                                      logged
+                                    </span>
+                                  )}
                                 </span>
                               }
                             />

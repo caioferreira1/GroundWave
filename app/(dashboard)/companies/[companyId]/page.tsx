@@ -10,9 +10,15 @@ import { TrendAreaChart } from "@/components/analytics/trend-area-chart";
 import { TrendDualAreaChart } from "@/components/analytics/trend-dual-area-chart";
 import { TodaysTasksCard } from "@/components/activity/todays-tasks";
 import { getActiveRedditAccounts } from "@/lib/activity/accounts";
-import { getManualCompletionActivity, getTodaysTaskCompletions, getWeekActivityForRotation } from "@/lib/activity/queries";
+import {
+  getManualCompletionActivity,
+  getTodaysRealActivity,
+  getTodaysTaskCompletions,
+  getWeekActivityForRotation,
+} from "@/lib/activity/queries";
 import {
   computeAccountDailyTasks,
+  computeAutoCompletedKeys,
   computeWeeklyGoalProgress,
   groupTasksByCollaborator,
   mergeActivity,
@@ -85,6 +91,7 @@ export default async function CompanyOverviewPage({
   let hasActiveAccounts = false;
   let nameByOwner = new Map<string, string>();
   let taskCompletions = new Set<string>();
+  let autoCompletedKeys = new Set<string>();
   let weeklyProgress: WeeklyGoalProgress = {
     genericComments: { done: 0, target: 0 },
     targetComments: { done: 0, target: 0 },
@@ -107,11 +114,12 @@ export default async function CompanyOverviewPage({
   };
 
   if (isStaff) {
-    const [accounts, realActivity, manualActivity, activityByAccount, { data: profiles }, completions] =
+    const [accounts, realActivity, manualActivity, todaysActivity, activityByAccount, { data: profiles }, completions] =
       await Promise.all([
         getActiveRedditAccounts(supabase, companyId),
         getWeekActivityForRotation(supabase, companyId),
         getManualCompletionActivity(supabase, companyId),
+        getTodaysRealActivity(supabase, companyId, taskDate),
         getActivityByRedditAccount(supabase, companyId),
         supabase.from("profiles").select("id, display_name, email"),
         getTodaysTaskCompletions(supabase, companyId, taskDate),
@@ -127,6 +135,7 @@ export default async function CompanyOverviewPage({
     const dailyTasks = computeAccountDailyTasks(accounts, goals, activity, companyMentionOwnerAccountId);
     collaboratorTasks = groupTasksByCollaborator(dailyTasks, accounts);
     weeklyProgress = computeWeeklyGoalProgress(accounts, goals, activity);
+    autoCompletedKeys = computeAutoCompletedKeys(dailyTasks, todaysActivity);
   }
 
   const boundToggleTask = setDailyTaskCompletion.bind(null, companyId);
@@ -166,6 +175,7 @@ export default async function CompanyOverviewPage({
           hasActiveAccounts={hasActiveAccounts}
           taskDate={taskDate}
           initialCompletions={taskCompletions}
+          autoCompletedKeys={autoCompletedKeys}
           toggleTask={boundToggleTask}
         />
       )}
