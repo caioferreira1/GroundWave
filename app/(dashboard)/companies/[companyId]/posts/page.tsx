@@ -47,18 +47,38 @@ const STATUS_FILTERS = [
   { value: "failed", label: "Failed" },
 ] as const;
 
-const RELEVANT_FILTERS = [
-  { value: undefined, label: "Any" },
+// "all" is an explicit sentinel (not just an absent param) so the filter bar
+// can offer a real "show everything" state distinct from "no params yet" —
+// see resolveTriState below, since relevant/answered default to non-"all"
+// values when the param is missing.
+type TriState = "true" | "false" | "all";
+
+const RELEVANT_FILTERS: readonly { value: TriState; label: string }[] = [
+  { value: "all", label: "Any" },
   { value: "true", label: "Relevant" },
   { value: "false", label: "Not relevant" },
-] as const;
+];
 
-function filterHref(companyId: string, params: { status?: string; relevant?: string }) {
+const ANSWERED_FILTERS: readonly { value: TriState; label: string }[] = [
+  { value: "all", label: "Any" },
+  { value: "true", label: "Answered" },
+  { value: "false", label: "Not answered" },
+];
+
+/** Missing/garbage query values fall back to `fallback` — "all" is only ever reached by an explicit click. */
+function resolveTriState(raw: string | undefined, fallback: TriState): TriState {
+  return raw === "true" || raw === "false" || raw === "all" ? raw : fallback;
+}
+
+function filterHref(
+  companyId: string,
+  params: { status?: string; relevant: TriState; answered: TriState },
+) {
   const qs = new URLSearchParams();
   if (params.status) qs.set("status", params.status);
-  if (params.relevant) qs.set("relevant", params.relevant);
-  const query = qs.toString();
-  return `/companies/${companyId}/posts${query ? `?${query}` : ""}`;
+  qs.set("relevant", params.relevant);
+  qs.set("answered", params.answered);
+  return `/companies/${companyId}/posts?${qs.toString()}`;
 }
 
 export default async function CompanyPostsPage({
@@ -66,11 +86,18 @@ export default async function CompanyPostsPage({
   searchParams,
 }: {
   params: Promise<{ companyId: string }>;
-  searchParams: Promise<{ status?: string; relevant?: string }>;
+  searchParams: Promise<{ status?: string; relevant?: string; answered?: string }>;
 }) {
   const { companyId } = await params;
-  const { status, relevant } = await searchParams;
-  const hasFilters = Boolean(status || relevant);
+  const { status, relevant: relevantRaw, answered: answeredRaw } = await searchParams;
+  const statusFilter =
+    status === "pending" || status === "processed" || status === "failed" ? status : undefined;
+  // Landing on the page with no filters at all defaults to "relevant, not yet
+  // answered" — the useful triage view — while still letting "Any"/"Any"
+  // reach a real show-everything state via the explicit "all" sentinel.
+  const relevant = resolveTriState(relevantRaw, "true");
+  const answered = resolveTriState(answeredRaw, "false");
+  const isShowingEverything = !statusFilter && relevant === "all" && answered === "all";
 
   const supabase = await createClient();
 
@@ -90,10 +117,14 @@ export default async function CompanyPostsPage({
     .eq("company_id", companyId)
     .order("posted_at", { ascending: false, nullsFirst: false })
     .limit(100);
-  if (status === "pending" || status === "processed" || status === "failed") {
-    query = query.eq("ai_status", status);
+  if (statusFilter) query = query.eq("ai_status", statusFilter);
+  if (relevant !== "all") query = query.eq("is_relevant", relevant === "true");
+  if (answered !== "all") {
+    query =
+      answered === "true"
+        ? query.not("comment_posted_at", "is", null)
+        : query.is("comment_posted_at", null);
   }
-  if (relevant) query = query.eq("is_relevant", relevant === "true");
 
   const { data: posts } = await query;
 
@@ -180,8 +211,8 @@ export default async function CompanyPostsPage({
             {STATUS_FILTERS.map((f) => (
               <SegmentedControlLink
                 key={f.label}
-                href={filterHref(companyId, { status: f.value, relevant })}
-                active={status === f.value}
+                href={filterHref(companyId, { status: f.value, relevant, answered })}
+                active={statusFilter === f.value}
               >
                 {f.label}
               </SegmentedControlLink>
@@ -194,8 +225,22 @@ export default async function CompanyPostsPage({
             {RELEVANT_FILTERS.map((f) => (
               <SegmentedControlLink
                 key={f.label}
-                href={filterHref(companyId, { status, relevant: f.value })}
+                href={filterHref(companyId, { status: statusFilter, relevant: f.value, answered })}
                 active={relevant === f.value}
+              >
+                {f.label}
+              </SegmentedControlLink>
+            ))}
+          </SegmentedControl>
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Answered</p>
+          <SegmentedControl>
+            {ANSWERED_FILTERS.map((f) => (
+              <SegmentedControlLink
+                key={f.label}
+                href={filterHref(companyId, { status: statusFilter, relevant, answered: f.value })}
+                active={answered === f.value}
               >
                 {f.label}
               </SegmentedControlLink>
@@ -417,13 +462,16 @@ export default async function CompanyPostsPage({
             </Card>
           ))}
         </div>
-      ) : hasFilters ? (
+      ) : !isShowingEverything ? (
         <EmptyState
           icon={MessagesSquare}
           title="No posts match these filters"
-          description="Try a different status or relevance filter."
+          description="Try a different status, relevance, or answered filter."
           action={
-            <Link href={`/companies/${companyId}/posts`} className={buttonClass("secondary", "sm")}>
+            <Link
+              href={filterHref(companyId, { relevant: "all", answered: "all" })}
+              className={buttonClass("secondary", "sm")}
+            >
               Clear filters
             </Link>
           }
