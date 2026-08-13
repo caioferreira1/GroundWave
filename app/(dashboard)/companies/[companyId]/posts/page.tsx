@@ -28,6 +28,7 @@ import {
   buttonClass,
 } from "@/components/ui";
 import { ManualCommentDialog } from "@/components/posts/manual-comment-dialog";
+import { RunIngestionButton } from "@/components/posts/run-ingestion-button";
 import {
   addManualComment,
   generateComment,
@@ -167,21 +168,7 @@ export default async function CompanyPostsPage({
                 minutes; results show up here once it finishes, no need to wait on this page.
               </CardDescription>
             </div>
-            <form action={runNowAction} className="flex flex-col items-end gap-1.5">
-              <SubmitButton variant="secondary" size="sm" pendingText="Starting…">
-                Run ingestion now
-              </SubmitButton>
-              <p className="font-mono text-xs text-muted-foreground">
-                {lastRun
-                  ? lastRun.status === "RUNNING"
-                    ? "Last run: in progress… · "
-                    : `Last run: $${lastRun.cost_usd.toFixed(2)} (${lastRun.item_count} posts) · `
-                  : ""}
-                {usage
-                  ? `Apify: $${usage.spentUsd.toFixed(2)}${usage.limitUsd ? ` / $${usage.limitUsd.toFixed(2)}` : ""} this month`
-                  : "Apify usage unavailable"}
-              </p>
-            </form>
+            <RunIngestionButton action={runNowAction} lastRun={lastRun} usage={usage} />
           </CardContent>
         </Card>
       )}

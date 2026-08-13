@@ -21,8 +21,9 @@ export async function runIngestionNow(companyId: string) {
 
   // A real run takes a few minutes (see dispatchCompanyIngestion) — without
   // this, repeated clicks while one is still in flight would each spend
-  // real Apify credits on an overlapping run. No-op instead; the page
-  // already shows "Last run: in progress…" while this is true.
+  // real Apify credits on an overlapping run. Throwing (rather than a
+  // silent no-op) lets the client surface it as a toast instead of the
+  // click looking like nothing happened.
   const { data: activeRun } = await supabase
     .from("apify_runs")
     .select("run_id")
@@ -30,7 +31,9 @@ export async function runIngestionNow(companyId: string) {
     .eq("status", "RUNNING")
     .limit(1)
     .maybeSingle();
-  if (activeRun) return;
+  if (activeRun) {
+    throw new Error("A run is already in progress for this company — wait for it to finish.");
+  }
 
   const { data: company, error } = await supabase
     .from("companies")
