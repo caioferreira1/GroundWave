@@ -1,33 +1,19 @@
 import Link from "next/link";
-import {
-  ArrowBigUp,
-  Calendar,
-  ExternalLink,
-  Hash,
-  MessagesSquare,
-  ThumbsDown,
-  ThumbsUp,
-  User,
-} from "lucide-react";
+import { MessagesSquare } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getApifyAccountUsage } from "@/lib/reddit/apify";
 import {
-  Badge,
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   EmptyState,
-  Input,
   PageHeading,
   SegmentedControl,
   SegmentedControlLink,
-  Select,
-  SubmitButton,
-  Textarea,
   buttonClass,
 } from "@/components/ui";
 import { ManualCommentDialog } from "@/components/posts/manual-comment-dialog";
+import { PostCard } from "@/components/posts/post-card";
 import { RunIngestionButton } from "@/components/posts/run-ingestion-button";
 import {
   addManualComment,
@@ -252,214 +238,27 @@ export default async function CompanyPostsPage({
       {(posts ?? []).length > 0 ? (
         <div className="space-y-3">
           {(posts ?? []).map((post) => (
-            <Card key={post.id} interactive>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  {post.is_manual ? (
-                    <Badge variant="accent">Manual entry</Badge>
-                  ) : (
-                    <>
-                      <Badge
-                        variant={
-                          post.ai_status === "processed"
-                            ? "good"
-                            : post.ai_status === "failed"
-                              ? "critical"
-                              : "neutral"
-                        }
-                      >
-                        {post.ai_status}
-                      </Badge>
-                      {post.ai_status === "processed" && (
-                        <Badge variant={post.is_relevant ? "good" : "neutral"}>
-                          {post.is_relevant ? "Relevant" : "Not relevant"} ({post.relevance_score})
-                        </Badge>
-                      )}
-                      {post.human_verdict && <Badge variant="accent">Human: {post.human_verdict}</Badge>}
-                    </>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-                  {post.author && (
-                    <span className="inline-flex items-center gap-1 font-medium text-foreground">
-                      <User className="h-3.5 w-3.5" /> u/{post.author}
-                    </span>
-                  )}
-                  {post.subreddit && (
-                    <span className="inline-flex items-center gap-1">
-                      <Hash className="h-3.5 w-3.5" /> r/{post.subreddit}
-                    </span>
-                  )}
-                  <span className="inline-flex items-center gap-1">
-                    <ArrowBigUp className="h-3.5 w-3.5" /> {post.upvotes ?? 0}
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Calendar className="h-3.5 w-3.5" />
-                    {post.posted_at ? new Date(post.posted_at).toLocaleString() : "unknown date"}
-                  </span>
-                  <a
-                    href={post.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-primary hover:underline"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" /> View on Reddit
-                  </a>
-                </div>
-
-                {post.content && <p className="line-clamp-3 text-sm text-foreground">{post.content}</p>}
-
-                {post.ai_reasoning && (
-                  <p className="border-l-2 border-border pl-3 text-xs text-muted-foreground italic">
-                    {post.ai_reasoning}
-                  </p>
-                )}
-                {post.ai_error && <p className="text-xs text-destructive">{post.ai_error}</p>}
-
-                {post.is_relevant && (
-                  <div className="space-y-2 rounded-lg border border-primary/15 bg-accent p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium tracking-wide text-accent-foreground uppercase">
-                        Reply draft
-                      </span>
-                      {post.comment_posted_at && (
-                        <Badge variant="good">
-                          Posted{post.comment_posted_by && ` by ${profileMap.get(post.comment_posted_by) ?? "unknown"}`}
-                          {post.reddit_account_id &&
-                            ` · u/${accountNameById.get(post.reddit_account_id) ?? "unknown"}`}
-                          {post.comment_type && ` · ${post.comment_type}`}
-                        </Badge>
-                      )}
-                    </div>
-
-                    {isStaff && post.comment_posted_at && (
-                      <form
-                        action={setCommentViews.bind(null, companyId, post.id)}
-                        className="flex items-center gap-2"
-                      >
-                        <label className="text-xs text-muted-foreground" htmlFor={`views-${post.id}`}>
-                          Views
-                        </label>
-                        <Input
-                          id={`views-${post.id}`}
-                          type="number"
-                          name="comment_views_count"
-                          min={0}
-                          defaultValue={post.comment_views_count ?? ""}
-                          className="h-8 w-24 text-xs"
-                        />
-                        <SubmitButton variant="secondary" size="sm" pendingText="Saving…">
-                          Save
-                        </SubmitButton>
-                      </form>
-                    )}
-
-                    {post.generated_comment ? (
-                      isStaff ? (
-                        <form
-                          action={saveGeneratedComment.bind(null, companyId, post.id)}
-                          className="space-y-2"
-                        >
-                          <Textarea
-                            name="generated_comment"
-                            rows={3}
-                            defaultValue={post.generated_comment}
-                            className="text-sm"
-                          />
-                          <SubmitButton variant="secondary" size="sm" pendingText="Saving…">
-                            Save edits
-                          </SubmitButton>
-                        </form>
-                      ) : (
-                        <p className="text-sm text-foreground">{post.generated_comment}</p>
-                      )
-                    ) : (
-                      !isStaff && <p className="text-xs text-muted-foreground">No reply drafted yet.</p>
-                    )}
-
-                    {isStaff && (
-                      <div className="flex flex-wrap items-center gap-2">
-                        {!post.is_manual && (
-                          <form
-                            action={generateComment.bind(null, companyId, post.id)}
-                            className="flex items-center gap-2"
-                          >
-                            <SubmitButton variant="secondary" size="sm" pendingText="Generating…">
-                              {post.generated_comment ? "Regenerate" : "Generate reply"}
-                            </SubmitButton>
-                          </form>
-                        )}
-
-                        {post.generated_comment &&
-                          (post.comment_posted_at ? (
-                            <form action={unmarkCommentPosted.bind(null, companyId, post.id)}>
-                              <SubmitButton variant="ghost" size="sm" pendingText="Unmarking…">
-                                Unmark as posted
-                              </SubmitButton>
-                            </form>
-                          ) : (
-                            <form
-                              action={markCommentPosted.bind(null, companyId, post.id)}
-                              className="flex flex-wrap items-center gap-2"
-                            >
-                              <Select
-                                name="posted_by"
-                                defaultValue={user?.id ?? ""}
-                                required
-                                className="h-8 w-auto text-xs"
-                              >
-                                <option value="" disabled>
-                                  Who posted this?
-                                </option>
-                                {staffMembers.map((s) => (
-                                  <option key={s.id} value={s.id}>
-                                    {s.display_name ?? s.email}
-                                  </option>
-                                ))}
-                              </Select>
-                              {activeAccounts.length > 0 && (
-                                <>
-                                  <Select name="reddit_account_id" defaultValue="" className="h-8 w-auto text-xs">
-                                    <option value="">No account tracked</option>
-                                    {activeAccounts.map((a) => (
-                                      <option key={a.id} value={a.id}>
-                                        u/{a.account_name}
-                                      </option>
-                                    ))}
-                                  </Select>
-                                  <Select name="comment_type" defaultValue="target" className="h-8 w-auto text-xs">
-                                    <option value="target">Target (mentions/contributes)</option>
-                                    <option value="generic">Generic</option>
-                                  </Select>
-                                </>
-                              )}
-                              <SubmitButton variant="secondary" size="sm" pendingText="Marking…">
-                                Mark as posted
-                              </SubmitButton>
-                            </form>
-                          ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-
-              {isStaff && !post.is_manual && (
-                <CardFooter className="flex-wrap justify-end">
-                  <form action={setHumanVerdict.bind(null, companyId, post.id, "relevant")}>
-                    <SubmitButton variant="secondary" size="sm" pendingText="Marking…">
-                      <ThumbsUp className="h-3.5 w-3.5" /> Mark relevant
-                    </SubmitButton>
-                  </form>
-                  <form action={setHumanVerdict.bind(null, companyId, post.id, "irrelevant")}>
-                    <SubmitButton variant="secondary" size="sm" pendingText="Marking…">
-                      <ThumbsDown className="h-3.5 w-3.5" /> Mark irrelevant
-                    </SubmitButton>
-                  </form>
-                </CardFooter>
-              )}
-            </Card>
+            <PostCard
+              key={post.id}
+              post={post}
+              isStaff={isStaff}
+              currentUserId={user?.id ?? null}
+              postedByName={
+                post.comment_posted_by ? (profileMap.get(post.comment_posted_by) ?? "unknown") : null
+              }
+              accountName={
+                post.reddit_account_id ? (accountNameById.get(post.reddit_account_id) ?? "unknown") : null
+              }
+              staffMembers={staffMembers}
+              activeAccounts={activeAccounts}
+              markRelevantAction={setHumanVerdict.bind(null, companyId, post.id, "relevant")}
+              markIrrelevantAction={setHumanVerdict.bind(null, companyId, post.id, "irrelevant")}
+              generateCommentAction={generateComment.bind(null, companyId, post.id)}
+              saveGeneratedCommentAction={saveGeneratedComment.bind(null, companyId, post.id)}
+              setCommentViewsAction={setCommentViews.bind(null, companyId, post.id)}
+              markCommentPostedAction={markCommentPosted.bind(null, companyId, post.id)}
+              unmarkCommentPostedAction={unmarkCommentPosted.bind(null, companyId, post.id)}
+            />
           ))}
         </div>
       ) : !isShowingEverything ? (
