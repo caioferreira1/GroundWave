@@ -24,7 +24,7 @@ export default async function DashboardLayout({
   const roleVariant = isAdmin ? "accent" : isStaff ? "neutral" : "warning";
 
   return (
-    <div className="flex min-h-screen flex-col lg:flex-row">
+    <div className="flex min-h-screen flex-col lg:h-screen lg:flex-row lg:overflow-hidden print:h-auto print:overflow-visible">
       <GradientBackdrop />
       <Sidebar
         companies={companies ?? []}
@@ -34,7 +34,7 @@ export default async function DashboardLayout({
         userLabel={abbreviateName(profile.display_name, profile.email)}
         signOutAction={signOut}
       />
-      <main className="min-w-0 flex-1 px-6 py-8 lg:px-10 lg:py-10">
+      <main className="min-w-0 flex-1 px-6 py-8 lg:overflow-y-auto lg:px-10 lg:py-10 print:overflow-visible">
         <div className="animate-fade-in-up max-w-6xl min-w-0">{children}</div>
       </main>
     </div>
