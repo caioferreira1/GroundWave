@@ -83,6 +83,7 @@ export type Database = {
           activity_target_comments_per_week: number;
           activity_generic_post_interval_days: number;
           activity_company_post_per_week: number;
+          activity_generic_posts_before_target: number;
           created_at: string;
           updated_at: string;
         };

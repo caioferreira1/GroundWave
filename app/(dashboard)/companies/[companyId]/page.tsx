@@ -9,6 +9,7 @@ import { ChartLegend } from "@/components/analytics/legend";
 import { TrendAreaChart } from "@/components/analytics/trend-area-chart";
 import { TrendDualAreaChart } from "@/components/analytics/trend-dual-area-chart";
 import { TodaysTasksCard } from "@/components/activity/todays-tasks";
+import { RotationStatusCard, type RotationRow } from "@/components/activity/rotation-status-card";
 import { getActiveRedditAccounts } from "@/lib/activity/accounts";
 import {
   getManualCompletionActivity,
@@ -18,11 +19,13 @@ import {
 } from "@/lib/activity/queries";
 import {
   computeAccountDailyTasks,
+  computeAccountRotationCountdown,
   computeAutoCompletedKeys,
+  computeCompanyMentionRotationStatus,
   computeWeeklyGoalProgress,
   groupTasksByCollaborator,
   mergeActivity,
-  pickCompanyMentionOwnerAccountId,
+  type CompanyMentionRotationStatus,
   type WeeklyGoalProgress,
 } from "@/lib/activity/rotation";
 import { setDailyTaskCompletion } from "./actions";
@@ -66,7 +69,7 @@ export default async function CompanyOverviewPage({
     supabase
       .from("companies")
       .select(
-        "id, name, profile, inbound_webhook_token, activity_generic_comments_per_week, activity_target_comments_per_week, activity_generic_post_interval_days, activity_company_post_per_week",
+        "id, name, profile, inbound_webhook_token, activity_generic_comments_per_week, activity_target_comments_per_week, activity_generic_post_interval_days, activity_company_post_per_week, activity_generic_posts_before_target",
       )
       .eq("id", companyId)
       .maybeSingle(),
@@ -98,6 +101,8 @@ export default async function CompanyOverviewPage({
     genericPosts: { done: 0, target: 0 },
     companyMentionPosts: { done: 0, target: 0 },
   };
+  let rotationStatus: CompanyMentionRotationStatus = { state: "no_active_accounts" };
+  let rotationRows: RotationRow[] = [];
 
   // UTC calendar date, matching the rest of the app's UTC-only date handling
   // (see lib/analytics/bucket.ts) — a session left open past midnight UTC
@@ -109,6 +114,7 @@ export default async function CompanyOverviewPage({
     targetCommentsPerWeek: company.activity_target_comments_per_week,
     genericPostIntervalDays: company.activity_generic_post_interval_days,
     companyPostPerWeek: company.activity_company_post_per_week,
+    genericPostsBeforeTarget: company.activity_generic_posts_before_target,
   };
 
   if (isStaff) {
@@ -129,11 +135,18 @@ export default async function CompanyOverviewPage({
     taskCompletions = completions;
 
     const activity = mergeActivity(realActivity, manualActivity);
-    const companyMentionOwnerAccountId = pickCompanyMentionOwnerAccountId(accounts, activity, goals);
-    const dailyTasks = computeAccountDailyTasks(accounts, goals, activity, companyMentionOwnerAccountId);
+    rotationStatus = computeCompanyMentionRotationStatus(accounts, activity, goals);
+    const dailyTasks = computeAccountDailyTasks(accounts, goals, activity, rotationStatus);
     collaboratorTasks = groupTasksByCollaborator(dailyTasks, accounts);
     weeklyProgress = computeWeeklyGoalProgress(accounts, goals, activity);
     autoCompletedKeys = computeAutoCompletedKeys(dailyTasks, todaysActivity);
+    rotationRows = accounts.map((account) => ({
+      accountId: account.id,
+      accountName: account.account_name,
+      ownerName: nameByOwner.get(account.owner_user_id) ?? "Unknown",
+      genericPostsDone: activity.genericPostsSinceLastCompanyMention.get(account.id) ?? 0,
+      countdown: computeAccountRotationCountdown(account, goals, activity, rotationStatus),
+    }));
   }
 
   const boundToggleTask = setDailyTaskCompletion.bind(null, companyId);
@@ -175,6 +188,15 @@ export default async function CompanyOverviewPage({
           initialCompletions={taskCompletions}
           autoCompletedKeys={autoCompletedKeys}
           toggleTask={boundToggleTask}
+        />
+      )}
+
+      {isStaff && (
+        <RotationStatusCard
+          goals={goals}
+          rotationStatus={rotationStatus}
+          rows={rotationRows}
+          hasActiveAccounts={hasActiveAccounts}
         />
       )}
 

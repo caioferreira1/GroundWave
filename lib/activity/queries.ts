@@ -75,7 +75,32 @@ export async function getWeekActivityForRotation(
     }
   }
 
-  return { commentsByAccount, postsByAccount, lastGenericPostAt, lastCompanyMentionPostAt };
+  // Same newest-first walk: count generic posts per account until hitting
+  // that account's most recent company_mention row (stop there — anything
+  // older doesn't count toward the current streak), or running out (count
+  // all its generic posts ever, if it's never made a company-mention post).
+  const genericPostsSinceLastCompanyMention = new Map<string, number>();
+  const resolvedForMention = new Set<string>();
+  for (const row of allPosts ?? []) {
+    if (!row.reddit_account_id || resolvedForMention.has(row.reddit_account_id)) continue;
+    if (row.post_type === "company_mention") {
+      resolvedForMention.add(row.reddit_account_id);
+      if (!genericPostsSinceLastCompanyMention.has(row.reddit_account_id)) {
+        genericPostsSinceLastCompanyMention.set(row.reddit_account_id, 0);
+      }
+    } else if (row.post_type === "generic") {
+      const current = genericPostsSinceLastCompanyMention.get(row.reddit_account_id) ?? 0;
+      genericPostsSinceLastCompanyMention.set(row.reddit_account_id, current + 1);
+    }
+  }
+
+  return {
+    commentsByAccount,
+    postsByAccount,
+    lastGenericPostAt,
+    lastCompanyMentionPostAt,
+    genericPostsSinceLastCompanyMention,
+  };
 }
 
 /**
@@ -206,5 +231,33 @@ export async function getManualCompletionActivity(
     }
   }
 
-  return { commentsByAccount, postsByAccount, lastGenericPostAt, lastCompanyMentionPostAt };
+  // Same "generic posts since last company-mention post" streak as
+  // getWeekActivityForRotation, but over manual checkbox completions —
+  // needs its own newest-first sort first since (unlike allPosts above)
+  // this query has no .order().
+  const genericPostsSinceLastCompanyMention = new Map<string, number>();
+  const resolvedForMention = new Set<string>();
+  const rotationRelevant = (data ?? [])
+    .filter((row) => row.task_key === "generic_post" || row.task_key === "company_mention_post")
+    .sort((a, b) => (a.task_date < b.task_date ? 1 : a.task_date > b.task_date ? -1 : 0));
+  for (const row of rotationRelevant) {
+    if (resolvedForMention.has(row.reddit_account_id)) continue;
+    if (row.task_key === "company_mention_post") {
+      resolvedForMention.add(row.reddit_account_id);
+      if (!genericPostsSinceLastCompanyMention.has(row.reddit_account_id)) {
+        genericPostsSinceLastCompanyMention.set(row.reddit_account_id, 0);
+      }
+    } else {
+      const current = genericPostsSinceLastCompanyMention.get(row.reddit_account_id) ?? 0;
+      genericPostsSinceLastCompanyMention.set(row.reddit_account_id, current + row.count);
+    }
+  }
+
+  return {
+    commentsByAccount,
+    postsByAccount,
+    lastGenericPostAt,
+    lastCompanyMentionPostAt,
+    genericPostsSinceLastCompanyMention,
+  };
 }

@@ -60,6 +60,7 @@ export async function updateActivityGoals(companyId: string, formData: FormData)
     activity_target_comments_per_week: Number(formData.get("activity_target_comments_per_week") ?? 3),
     activity_generic_post_interval_days: Number(formData.get("activity_generic_post_interval_days") ?? 2),
     activity_company_post_per_week: Number(formData.get("activity_company_post_per_week") ?? 1),
+    activity_generic_posts_before_target: Number(formData.get("activity_generic_posts_before_target") ?? 7),
   };
   for (const [key, value] of Object.entries(fields)) {
     if (!Number.isInteger(value) || value < 0) throw new Error(`${key} must be a non-negative whole number`);

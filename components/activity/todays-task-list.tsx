@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Avatar, Badge, Card, Checkbox, ProgressBar } from "@/components/ui";
 import { taskItems, type CollaboratorTasks, type DailyTaskKey } from "@/lib/activity/rotation";
+import { DismissibleNotice } from "./dismissible-notice";
 
 function completionKey(accountId: string, taskKey: DailyTaskKey): string {
   return `${accountId}:${taskKey}`;
@@ -99,6 +100,14 @@ export function TodaysTaskList({
                       {/* account_name is stored as typed, sometimes already including a "u/" prefix — don't double it. */}
                       u/{account.accountName.replace(/^u\//i, "")}
                     </p>
+                    {account.genericPostDelayedByTarget && (
+                      <DismissibleNotice>Generic post delayed — target post took priority today</DismissibleNotice>
+                    )}
+                    {account.companyMentionPostIsEarly && (
+                      <DismissibleNotice>
+                        Target post is an early pick — 100% of generic posts not reached yet
+                      </DismissibleNotice>
+                    )}
                     <ul className="space-y-1">
                       {items.map((item) => {
                         const key = completionKey(account.accountId, item.key);

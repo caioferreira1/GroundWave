@@ -29,7 +29,7 @@ export default async function CompanyAccountsPage({
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, name, activity_generic_comments_per_week, activity_target_comments_per_week, activity_generic_post_interval_days, activity_company_post_per_week",
+      "id, name, activity_generic_comments_per_week, activity_target_comments_per_week, activity_generic_post_interval_days, activity_company_post_per_week, activity_generic_posts_before_target",
     )
     .eq("id", companyId)
     .maybeSingle();
@@ -64,8 +64,9 @@ export default async function CompanyAccountsPage({
           <CardHeader>
             <CardTitle>Weekly activity goals</CardTitle>
             <CardDescription>
-              Company-wide weekly total, split evenly across active accounts (remainder goes to the
-              higher-karma accounts). Drives the Today&apos;s tasks panel on Overview.
+              Most fields below are a company-wide weekly total, split evenly across active accounts (remainder goes
+              to the higher-karma accounts) — except &quot;Generic posts before 1 target post&quot;, which applies to
+              each account individually. Drives the Today&apos;s tasks panel on Overview.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -116,6 +117,19 @@ export default async function CompanyAccountsPage({
                   type="number"
                   min={0}
                   defaultValue={company.activity_company_post_per_week}
+                />
+              </Field>
+              <Field
+                label="Generic posts before 1 target post (per account)"
+                htmlFor="activity_generic_posts_before_target"
+                hint="Per account, not split like the fields above: each individual account needs this many generic posts since its own last target post before it's picked for the next one. 0 = no gate. As a last resort, an account can be picked at 70% of this if no account has fully cleared it."
+              >
+                <Input
+                  id="activity_generic_posts_before_target"
+                  name="activity_generic_posts_before_target"
+                  type="number"
+                  min={0}
+                  defaultValue={company.activity_generic_posts_before_target}
                 />
               </Field>
             </div>

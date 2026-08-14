@@ -30,6 +30,8 @@ export type ActivityGoals = {
   targetCommentsPerWeek: number;
   genericPostIntervalDays: number;
   companyPostPerWeek: number;
+  /** Rotation gate: generic posts an account needs since its last company-mention post before it's eligible for the next one. 0 = no gate. */
+  genericPostsBeforeTarget: number;
 };
 
 /** Pre-aggregated by the caller from tagged `posts`/`post_generations` rows. */
@@ -42,6 +44,13 @@ export type WeekActivity = {
   lastGenericPostAt: Map<string, string | null>;
   /** Most recent ever (any week), keyed by reddit_account_id — null/missing = never posted. */
   lastCompanyMentionPostAt: Map<string, string | null>;
+  /**
+   * Generic posts made since this account's last company-mention post (or
+   * all generic posts ever, if it's never made one) — keyed by
+   * reddit_account_id, missing key = 0. Feeds the "N generic posts before 1
+   * target post" rotation gate in computeCompanyMentionRotationStatus().
+   */
+  genericPostsSinceLastCompanyMention: Map<string, number>;
 };
 
 export type AccountDailyTask = {
@@ -51,6 +60,10 @@ export type AccountDailyTask = {
   targetCommentsToday: number;
   genericPostToday: boolean;
   companyMentionPostToday: boolean;
+  /** True when this account was cadence-due for a generic post today AND also today's company-mention pick — the target post wins, so genericPostToday above is forced false. Surfaced as a dismissible disclaimer. */
+  genericPostDelayedByTarget: boolean;
+  /** True when today's company-mention post came from the 70% last-resort rotation tier, not the full genericPostsBeforeTarget threshold. Surfaced as a dismissible disclaimer. */
+  companyMentionPostIsEarly: boolean;
 };
 
 /** One collaborator's tasks, broken out per account they own — never summed across accounts, so it's clear which account needs what. */
@@ -107,29 +120,63 @@ export function mergeActivity(base: WeekActivity, extra: WeekActivity): WeekActi
     lastCompanyMentionPostAt.set(accountId, laterOf(lastCompanyMentionPostAt.get(accountId), extraIso));
   }
 
-  return { commentsByAccount, postsByAccount, lastGenericPostAt, lastCompanyMentionPostAt };
+  const genericPostsSinceLastCompanyMention = new Map(base.genericPostsSinceLastCompanyMention);
+  for (const [accountId, extraCount] of extra.genericPostsSinceLastCompanyMention) {
+    genericPostsSinceLastCompanyMention.set(
+      accountId,
+      (genericPostsSinceLastCompanyMention.get(accountId) ?? 0) + extraCount,
+    );
+  }
+
+  return {
+    commentsByAccount,
+    postsByAccount,
+    lastGenericPostAt,
+    lastCompanyMentionPostAt,
+    genericPostsSinceLastCompanyMention,
+  };
 }
 
 /**
- * Which active account owes this week's company-mention post: the one that
- * has gone longest without posting one (never-posted counts as most
- * overdue). Returns null once this week's quota is already met by someone,
- * or if there are no active accounts.
+ * Fraction of `genericPostsBeforeTarget` an account may fall back to when
+ * NO account has reached the full amount — a last-resort exception so the
+ * company isn't permanently stuck at 0 target posts if the ideal threshold
+ * is never quite met, while still barring brand-new accounts (0 posts)
+ * from being picked outright. Not configurable — a fixed policy, unlike
+ * genericPostsBeforeTarget itself. `Math.ceil` (not floor) keeps this a true
+ * "at least 70%" and means the relaxed bar coincides with the strict one for
+ * small thresholds (N <= 3) — there's no meaningfully weaker tier to fall
+ * back to at that scale, which is the conservative/expected outcome.
  */
-export function pickCompanyMentionOwnerAccountId(
+const RELAXED_ELIGIBILITY_RATIO = 0.7;
+
+function relaxedThreshold(genericPostsBeforeTarget: number): number {
+  return Math.ceil(genericPostsBeforeTarget * RELAXED_ELIGIBILITY_RATIO);
+}
+
+/** Accounts that have accrued enough generic posts to be considered for the next company-mention post, split into the ideal (100%) and last-resort (>=70%) tiers — `relaxed` is a superset of `strict`. */
+function partitionEligibility(
   accounts: RedditAccountForRotation[],
   activity: WeekActivity,
   goals: ActivityGoals,
-  now: Date = new Date(),
-): string | null {
-  if (accounts.length === 0) return null;
+): { strict: RedditAccountForRotation[]; relaxed: RedditAccountForRotation[] } {
+  const strict: RedditAccountForRotation[] = [];
+  const relaxed: RedditAccountForRotation[] = [];
+  const relaxedNeeded = relaxedThreshold(goals.genericPostsBeforeTarget);
 
-  const doneThisWeek = [...activity.postsByAccount.values()].reduce(
-    (sum, v) => sum + v.company_mention,
-    0,
-  );
-  if (doneThisWeek >= goals.companyPostPerWeek) return null;
+  for (const account of accounts) {
+    const done = activity.genericPostsSinceLastCompanyMention.get(account.id) ?? 0;
+    if (done >= goals.genericPostsBeforeTarget) strict.push(account);
+    if (done >= relaxedNeeded) relaxed.push(account);
+  }
+  return { strict, relaxed };
+}
 
+function pickLongestOverdue(
+  accounts: RedditAccountForRotation[],
+  activity: WeekActivity,
+  now: Date,
+): RedditAccountForRotation {
   let picked = accounts[0];
   let pickedAge = -Infinity;
   for (const account of accounts) {
@@ -139,7 +186,65 @@ export function pickCompanyMentionOwnerAccountId(
       picked = account;
     }
   }
-  return picked.id;
+  return picked;
+}
+
+export type CompanyMentionRotationStatus =
+  | { state: "no_active_accounts" }
+  | { state: "quota_met_this_week" }
+  /** No account has accrued even the 70% last-resort minimum yet — expected in e.g. week 1, not a missed goal. */
+  | { state: "no_eligible_accounts_yet" }
+  /** `relaxed: true` means the pick only cleared the 70% last-resort bar, not the full genericPostsBeforeTarget — surfaced as a dismissible disclaimer in the UI. */
+  | { state: "assigned"; accountId: string; relaxed: boolean };
+
+/**
+ * The company-wide "who owes this week's target/company-mention post, and
+ * why not if nobody does". Prefers accounts that have fully cleared
+ * `goals.genericPostsBeforeTarget` generic posts since their last one; only
+ * falls back to the 70%-or-more tier when zero accounts have fully cleared
+ * it (and the weekly quota still needs filling) — a last resort, never the
+ * default path. pickCompanyMentionOwnerAccountId() below is a thin
+ * string|null projection of this for callers that only need the id.
+ */
+export function computeCompanyMentionRotationStatus(
+  accounts: RedditAccountForRotation[],
+  activity: WeekActivity,
+  goals: ActivityGoals,
+  now: Date = new Date(),
+): CompanyMentionRotationStatus {
+  if (accounts.length === 0) return { state: "no_active_accounts" };
+
+  const doneThisWeek = [...activity.postsByAccount.values()].reduce(
+    (sum, v) => sum + v.company_mention,
+    0,
+  );
+  if (doneThisWeek >= goals.companyPostPerWeek) return { state: "quota_met_this_week" };
+
+  const { strict, relaxed } = partitionEligibility(accounts, activity, goals);
+  if (strict.length > 0) {
+    return { state: "assigned", accountId: pickLongestOverdue(strict, activity, now).id, relaxed: false };
+  }
+  if (relaxed.length > 0) {
+    return { state: "assigned", accountId: pickLongestOverdue(relaxed, activity, now).id, relaxed: true };
+  }
+  return { state: "no_eligible_accounts_yet" };
+}
+
+/**
+ * Which active account owes this week's company-mention post, as a plain
+ * id — see computeCompanyMentionRotationStatus() for the full "why" (quota
+ * met vs. nobody eligible vs. a relaxed/last-resort pick), which callers
+ * that need to explain the decision (e.g. the dashboard) should use
+ * directly instead of this projection.
+ */
+export function pickCompanyMentionOwnerAccountId(
+  accounts: RedditAccountForRotation[],
+  activity: WeekActivity,
+  goals: ActivityGoals,
+  now: Date = new Date(),
+): string | null {
+  const status = computeCompanyMentionRotationStatus(accounts, activity, goals, now);
+  return status.state === "assigned" ? status.accountId : null;
 }
 
 /**
@@ -181,25 +286,35 @@ export function computeAccountDailyTasks(
   accounts: RedditAccountForRotation[],
   goals: ActivityGoals,
   activity: WeekActivity,
-  companyMentionOwnerAccountId: string | null,
+  rotationStatus: CompanyMentionRotationStatus,
   now: Date = new Date(),
 ): AccountDailyTask[] {
   const daysLeftInWeek = Math.max(1, 8 - isoWeekday(now));
   const genericShares = splitWeeklyTarget(goals.genericCommentsPerWeek, accounts);
   const targetShares = splitWeeklyTarget(goals.targetCommentsPerWeek, accounts);
+  const companyMentionOwnerAccountId = rotationStatus.state === "assigned" ? rotationStatus.accountId : null;
 
   return accounts.map((account) => {
     const done = activity.commentsByAccount.get(account.id) ?? { generic: 0, target: 0 };
     const genericRemaining = Math.max(0, (genericShares.get(account.id) ?? 0) - done.generic);
     const targetRemaining = Math.max(0, (targetShares.get(account.id) ?? 0) - done.target);
 
+    const cadenceDueForGenericPost =
+      daysSince(activity.lastGenericPostAt.get(account.id), now) >= goals.genericPostIntervalDays;
+    const companyMentionPostToday = companyMentionOwnerAccountId === account.id;
+    // Nenhuma conta posta duas vezes no mesmo dia: o post target vence quando os dois coincidem.
+    const genericPostDelayedByTarget = cadenceDueForGenericPost && companyMentionPostToday;
+
     return {
       accountId: account.id,
       accountName: account.account_name,
       genericCommentsToday: Math.ceil(genericRemaining / daysLeftInWeek),
       targetCommentsToday: Math.ceil(targetRemaining / daysLeftInWeek),
-      genericPostToday: daysSince(activity.lastGenericPostAt.get(account.id), now) >= goals.genericPostIntervalDays,
-      companyMentionPostToday: companyMentionOwnerAccountId === account.id,
+      genericPostToday: cadenceDueForGenericPost && !companyMentionPostToday,
+      companyMentionPostToday,
+      genericPostDelayedByTarget,
+      companyMentionPostIsEarly:
+        companyMentionPostToday && rotationStatus.state === "assigned" && rotationStatus.relaxed,
     };
   });
 }
@@ -241,6 +356,55 @@ export function computeWeeklyGoalProgress(
     targetComments: { done: sumComments("target"), target: goals.targetCommentsPerWeek },
     genericPosts: { done: sumPosts("generic"), target: expectedPostsPerAccount * numAccounts },
     companyMentionPosts: { done: sumPosts("company_mention"), target: goals.companyPostPerWeek },
+  };
+}
+
+export type AccountRotationCountdown =
+  | { state: "posting_today"; early: boolean }
+  | { state: "quota_met_this_week" }
+  /** Cleared the full genericPostsBeforeTarget threshold — eligible, just waiting for the rotation to pick it. */
+  | { state: "eligible_awaiting_turn" }
+  /** Cleared the 70% last-resort bar but not the full threshold — could be picked early only if no fully-eligible account exists. */
+  | { state: "eligible_early_if_needed"; genericPostsDone: number; genericPostsNeeded: number }
+  | { state: "accruing"; genericPostsDone: number; genericPostsNeeded: number; estimatedDaysUntilEligible: number };
+
+/**
+ * One account's "when's my next target post" status for the dashboard
+ * countdown, given the already-computed company-wide rotation status
+ * (avoids recomputing the eligibility filter/quota check per account).
+ * estimatedDaysUntilEligible always projects toward the full (100%)
+ * threshold, not the 70% last-resort bar — that bar is an exception valve,
+ * not the account's actual target. It's a rough projection assuming this
+ * account keeps posting generic content exactly on its configured cadence —
+ * not a guarantee, since actual posting is human-driven.
+ */
+export function computeAccountRotationCountdown(
+  account: RedditAccountForRotation,
+  goals: ActivityGoals,
+  activity: WeekActivity,
+  rotationStatus: CompanyMentionRotationStatus,
+): AccountRotationCountdown {
+  if (rotationStatus.state === "assigned" && rotationStatus.accountId === account.id) {
+    return { state: "posting_today", early: rotationStatus.relaxed };
+  }
+  if (rotationStatus.state === "quota_met_this_week") {
+    return { state: "quota_met_this_week" };
+  }
+
+  const done = activity.genericPostsSinceLastCompanyMention.get(account.id) ?? 0;
+  const needed = goals.genericPostsBeforeTarget;
+  if (done >= needed) {
+    return { state: "eligible_awaiting_turn" };
+  }
+  if (done >= relaxedThreshold(needed)) {
+    return { state: "eligible_early_if_needed", genericPostsDone: done, genericPostsNeeded: needed };
+  }
+
+  return {
+    state: "accruing",
+    genericPostsDone: done,
+    genericPostsNeeded: needed,
+    estimatedDaysUntilEligible: (needed - done) * goals.genericPostIntervalDays,
   };
 }
 

@@ -8,6 +8,7 @@ export type WeeklyGoalSummary = {
   targetCommentsPerWeek: number;
   genericPostIntervalDays: number;
   companyPostPerWeek: number;
+  genericPostsBeforeTarget: number;
 };
 
 /**
@@ -87,6 +88,10 @@ export function TodaysTasksCard({
               <p>Generic post every {goals.genericPostIntervalDays}d (per account)</p>
               <p>
                 {goals.companyPostPerWeek} company-mention post{goals.companyPostPerWeek === 1 ? "" : "s"}/wk (rotates)
+              </p>
+              <p>
+                {goals.genericPostsBeforeTarget} generic post{goals.genericPostsBeforeTarget === 1 ? "" : "s"} before 1
+                target post (per account, rotation gate)
               </p>
             </div>
           </div>
