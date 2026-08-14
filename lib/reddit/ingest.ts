@@ -257,6 +257,21 @@ export async function completeCompanyIngestion(companyId: string, resource: Apif
     const message = err instanceof Error ? err.message : String(err);
     if (err instanceof ApifyRunError) {
       await updateApifyRun(err.stats.runId, statsToRowPatch(err.stats, message));
+    } else {
+      // The Apify run itself finished fine (parseRunResult succeeded) but
+      // something downstream — insert/classify — threw. Still must clear
+      // RUNNING here or this row blocks every future "Run ingestion now"
+      // click for this company forever (see actions.ts::runIngestionNow).
+      await updateApifyRun(resource.id, {
+        dataset_id: resource.defaultDatasetId ?? null,
+        status: (resource.status as ApifyRunRowStatus) || "FAILED",
+        cost_usd: resource.usageTotalUsd ?? 0,
+        compute_units: resource.stats?.computeUnits ?? 0,
+        item_count: 0,
+        run_time_secs: resource.stats?.runTimeSecs ?? 0,
+        error: message,
+        finished_at: resource.finishedAt ?? now,
+      });
     }
     await admin
       .from("companies")
