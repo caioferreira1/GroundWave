@@ -47,6 +47,7 @@ export function TodaysTasksCard({
   taskDate,
   initialCompletions,
   autoCompletedKeys,
+  overdueKeys,
   toggleTask,
 }: {
   goals: WeeklyGoalSummary;
@@ -57,6 +58,7 @@ export function TodaysTasksCard({
   taskDate: string;
   initialCompletions: Set<string>;
   autoCompletedKeys: Set<string>;
+  overdueKeys: Set<string>;
   toggleTask: (
     redditAccountId: string,
     taskKey: DailyTaskKey,
@@ -136,6 +138,7 @@ export function TodaysTasksCard({
                 taskDate={taskDate}
                 initialCompletions={initialCompletions}
                 autoCompletedKeys={autoCompletedKeys}
+                overdueKeys={overdueKeys}
                 toggleTask={toggleTask}
               />
             </div>

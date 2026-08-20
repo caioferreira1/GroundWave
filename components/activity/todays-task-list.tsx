@@ -16,6 +16,7 @@ export function TodaysTaskList({
   taskDate,
   initialCompletions,
   autoCompletedKeys,
+  overdueKeys,
   toggleTask,
 }: {
   collaboratorTasks: CollaboratorTasks[];
@@ -23,6 +24,7 @@ export function TodaysTaskList({
   taskDate: string;
   initialCompletions: Set<string>;
   autoCompletedKeys: Set<string>;
+  overdueKeys: Set<string>;
   toggleTask: (
     redditAccountId: string,
     taskKey: DailyTaskKey,
@@ -113,6 +115,7 @@ export function TodaysTaskList({
                         const key = completionKey(account.accountId, item.key);
                         const isAuto = autoCompletedKeys.has(key);
                         const done = isAuto || completed.has(key);
+                        const isOverdue = !done && overdueKeys.has(key);
                         return (
                           <li key={item.key}>
                             <Checkbox
@@ -121,11 +124,24 @@ export function TodaysTaskList({
                               disabled={isAuto}
                               onChange={(e) => handleToggle(account.accountId, item.key, item.count, e.target.checked)}
                               label={
-                                <span className={done ? "text-muted-foreground line-through" : "text-foreground"}>
+                                <span
+                                  className={
+                                    done
+                                      ? "text-muted-foreground line-through"
+                                      : isOverdue
+                                        ? "font-medium text-destructive"
+                                        : "text-foreground"
+                                  }
+                                >
                                   {item.label}
                                   {isAuto && (
                                     <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wide text-primary no-underline">
                                       logged
+                                    </span>
+                                  )}
+                                  {isOverdue && (
+                                    <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wide text-destructive no-underline">
+                                      overdue
                                     </span>
                                   )}
                                 </span>

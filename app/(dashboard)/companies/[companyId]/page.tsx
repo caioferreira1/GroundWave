@@ -22,6 +22,7 @@ import {
   computeAccountRotationCountdown,
   computeAutoCompletedKeys,
   computeCompanyMentionRotationStatus,
+  computeOverdueKeys,
   computeWeeklyGoalProgress,
   groupTasksByCollaborator,
   mergeActivity,
@@ -95,6 +96,7 @@ export default async function CompanyOverviewPage({
   let nameByOwner = new Map<string, string>();
   let taskCompletions = new Set<string>();
   let autoCompletedKeys = new Set<string>();
+  let overdueKeys = new Set<string>();
   let weeklyProgress: WeeklyGoalProgress = {
     genericComments: { done: 0, target: 0 },
     targetComments: { done: 0, target: 0 },
@@ -140,6 +142,7 @@ export default async function CompanyOverviewPage({
     collaboratorTasks = groupTasksByCollaborator(dailyTasks, accounts);
     weeklyProgress = computeWeeklyGoalProgress(accounts, goals, activity);
     autoCompletedKeys = computeAutoCompletedKeys(dailyTasks, todaysActivity);
+    overdueKeys = computeOverdueKeys(accounts, goals, activity, rotationStatus, taskDate);
     rotationRows = accounts.map((account) => ({
       accountId: account.id,
       accountName: account.account_name,
@@ -187,6 +190,7 @@ export default async function CompanyOverviewPage({
           taskDate={taskDate}
           initialCompletions={taskCompletions}
           autoCompletedKeys={autoCompletedKeys}
+          overdueKeys={overdueKeys}
           toggleTask={boundToggleTask}
         />
       )}

@@ -580,6 +580,106 @@ export function computeAutoCompletedKeys(dailyTasks: AccountDailyTask[], todaysA
   return result;
 }
 
+function sumCommentDaysBefore(
+  byDay: Map<string, { generic: number; target: number }> | undefined,
+  beforeDate: string,
+): { generic: number; target: number } {
+  let generic = 0;
+  let target = 0;
+  for (const [day, counts] of byDay ?? []) {
+    if (day < beforeDate) {
+      generic += counts.generic;
+      target += counts.target;
+    }
+  }
+  return { generic, target };
+}
+
+function sumCompanyMentionDaysBefore(
+  byDay: Map<string, { generic: number; company_mention: number }> | undefined,
+  beforeDate: string,
+): number {
+  let company_mention = 0;
+  for (const [day, counts] of byDay ?? []) {
+    if (day < beforeDate) company_mention += counts.company_mention;
+  }
+  return company_mention;
+}
+
+/**
+ * Which Today's tasks chips represent a backlog carried over from before
+ * today — e.g. an account that should have posted a comment yesterday and
+ * didn't — so the UI can render them in red instead of the normal color,
+ * making a missed day visible instead of silently folding into a bigger
+ * "today" number. `taskDate` is the UTC calendar date being rendered (see
+ * page.tsx); only days strictly before it count toward "backlog".
+ *
+ * Two different overdue signals, since the two task shapes work
+ * differently:
+ * - generic_post is a pure per-account cadence (every N days since the
+ *   account's last generic post, not tied to the calendar week) — overdue
+ *   when today is already more than a full interval past the due date,
+ *   i.e. it was already due before today, not just due today.
+ * - Comments (generic/target) and the company-mention post are weekly
+ *   quotas spread across the days elapsed so far this ISO week (Monday
+ *   reset) — overdue when what's actually been done through the end of
+ *   yesterday (real + manual, already de-duplicated per day by
+ *   mergeActivity's *ByDay maps) falls short of the linear pace needed to
+ *   hit the weekly target: comments use each account's per-account share
+ *   (splitWeeklyTarget), the company-mention post uses the company-wide
+ *   weekly quota, checked only against whichever account the rotation has
+ *   assigned today (nobody else can be "overdue" on a task they don't
+ *   currently own).
+ *
+ * Only meaningful for chips still outstanding today — taskItems() already
+ * filters those to count > 0, so a chip that's caught up simply won't be in
+ * dailyTasks/taskItems for the caller to look this Set up against.
+ */
+export function computeOverdueKeys(
+  accounts: RedditAccountForRotation[],
+  goals: ActivityGoals,
+  activity: WeekActivity,
+  rotationStatus: CompanyMentionRotationStatus,
+  taskDate: string,
+  now: Date = new Date(),
+): Set<string> {
+  const result = new Set<string>();
+
+  for (const account of accounts) {
+    if (daysSince(activity.lastGenericPostAt.get(account.id), now) > goals.genericPostIntervalDays) {
+      result.add(`${account.id}:generic_post`);
+    }
+  }
+
+  // Full days already elapsed this ISO week before today — 0 on Monday, so
+  // a fresh week never flags a pace-based backlog on day one.
+  const elapsedDays = isoWeekday(now) - 1;
+  if (elapsedDays > 0) {
+    const genericShares = splitWeeklyTarget(goals.genericCommentsPerWeek, accounts);
+    const targetShares = splitWeeklyTarget(goals.targetCommentsPerWeek, accounts);
+
+    for (const account of accounts) {
+      const doneBefore = sumCommentDaysBefore(activity.commentsByAccountByDay.get(account.id), taskDate);
+      const genericExpected = Math.floor(((genericShares.get(account.id) ?? 0) * elapsedDays) / 7);
+      if (doneBefore.generic < genericExpected) result.add(`${account.id}:generic_comments`);
+
+      const targetExpected = Math.floor(((targetShares.get(account.id) ?? 0) * elapsedDays) / 7);
+      if (doneBefore.target < targetExpected) result.add(`${account.id}:target_comments`);
+    }
+
+    if (rotationStatus.state === "assigned") {
+      const doneCompanyBefore = accounts.reduce(
+        (sum, a) => sum + sumCompanyMentionDaysBefore(activity.postsByAccountByDay.get(a.id), taskDate),
+        0,
+      );
+      const expected = Math.floor((goals.companyPostPerWeek * elapsedDays) / 7);
+      if (doneCompanyBefore < expected) result.add(`${rotationStatus.accountId}:company_mention_post`);
+    }
+  }
+
+  return result;
+}
+
 /** Groups each account's daily task into its owning collaborator's list — no summing, so "which account needs what" stays visible. */
 export function groupTasksByCollaborator(
   tasks: AccountDailyTask[],
