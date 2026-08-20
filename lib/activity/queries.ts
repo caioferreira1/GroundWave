@@ -20,14 +20,14 @@ export async function getWeekActivityForRotation(
   const [{ data: weekComments }, { data: weekPosts }, { data: allPosts }] = await Promise.all([
     supabase
       .from("posts")
-      .select("reddit_account_id, comment_type")
+      .select("reddit_account_id, comment_type, comment_posted_at")
       .eq("company_id", companyId)
       .not("comment_posted_at", "is", null)
       .not("reddit_account_id", "is", null)
       .gte("comment_posted_at", weekStart),
     supabase
       .from("post_generations")
-      .select("reddit_account_id, post_type")
+      .select("reddit_account_id, post_type, posted_at")
       .eq("company_id", companyId)
       .eq("mode", "company")
       .not("posted_at", "is", null)
@@ -44,21 +44,39 @@ export async function getWeekActivityForRotation(
   ]);
 
   const commentsByAccount = new Map<string, { generic: number; target: number }>();
+  const commentsByAccountByDay = new Map<string, Map<string, { generic: number; target: number }>>();
   for (const row of weekComments ?? []) {
-    if (!row.reddit_account_id) continue;
+    if (!row.reddit_account_id || !row.comment_posted_at) continue;
     const entry = commentsByAccount.get(row.reddit_account_id) ?? { generic: 0, target: 0 };
     if (row.comment_type === "generic") entry.generic += 1;
     else if (row.comment_type === "target") entry.target += 1;
     commentsByAccount.set(row.reddit_account_id, entry);
+
+    const day = row.comment_posted_at.slice(0, 10);
+    const byDay = commentsByAccountByDay.get(row.reddit_account_id) ?? new Map<string, { generic: number; target: number }>();
+    const dayEntry = byDay.get(day) ?? { generic: 0, target: 0 };
+    if (row.comment_type === "generic") dayEntry.generic += 1;
+    else if (row.comment_type === "target") dayEntry.target += 1;
+    byDay.set(day, dayEntry);
+    commentsByAccountByDay.set(row.reddit_account_id, byDay);
   }
 
   const postsByAccount = new Map<string, { generic: number; company_mention: number }>();
+  const postsByAccountByDay = new Map<string, Map<string, { generic: number; company_mention: number }>>();
   for (const row of weekPosts ?? []) {
-    if (!row.reddit_account_id) continue;
+    if (!row.reddit_account_id || !row.posted_at) continue;
     const entry = postsByAccount.get(row.reddit_account_id) ?? { generic: 0, company_mention: 0 };
     if (row.post_type === "generic") entry.generic += 1;
     else if (row.post_type === "company_mention") entry.company_mention += 1;
     postsByAccount.set(row.reddit_account_id, entry);
+
+    const day = row.posted_at.slice(0, 10);
+    const byDay = postsByAccountByDay.get(row.reddit_account_id) ?? new Map<string, { generic: number; company_mention: number }>();
+    const dayEntry = byDay.get(day) ?? { generic: 0, company_mention: 0 };
+    if (row.post_type === "generic") dayEntry.generic += 1;
+    else if (row.post_type === "company_mention") dayEntry.company_mention += 1;
+    byDay.set(day, dayEntry);
+    postsByAccountByDay.set(row.reddit_account_id, byDay);
   }
 
   // allPosts is ordered newest-first, so the first row seen per
@@ -100,6 +118,8 @@ export async function getWeekActivityForRotation(
     lastGenericPostAt,
     lastCompanyMentionPostAt,
     genericPostsSinceLastCompanyMention,
+    commentsByAccountByDay,
+    postsByAccountByDay,
   };
 }
 
@@ -201,6 +221,8 @@ export async function getManualCompletionActivity(
 
   const commentsByAccount = new Map<string, { generic: number; target: number }>();
   const postsByAccount = new Map<string, { generic: number; company_mention: number }>();
+  const commentsByAccountByDay = new Map<string, Map<string, { generic: number; target: number }>>();
+  const postsByAccountByDay = new Map<string, Map<string, { generic: number; company_mention: number }>>();
   const lastGenericPostAt = new Map<string, string | null>();
   const lastCompanyMentionPostAt = new Map<string, string | null>();
 
@@ -212,6 +234,15 @@ export async function getManualCompletionActivity(
       if (row.task_key === "generic_comments") entry.generic += row.count;
       else entry.target += row.count;
       commentsByAccount.set(row.reddit_account_id, entry);
+
+      // Unique on (reddit_account_id, task_key, task_date), so at most one
+      // row per account+type+day here — no accumulation needed, just set.
+      const byDay = commentsByAccountByDay.get(row.reddit_account_id) ?? new Map<string, { generic: number; target: number }>();
+      const dayEntry = byDay.get(row.task_date) ?? { generic: 0, target: 0 };
+      if (row.task_key === "generic_comments") dayEntry.generic = row.count;
+      else dayEntry.target = row.count;
+      byDay.set(row.task_date, dayEntry);
+      commentsByAccountByDay.set(row.reddit_account_id, byDay);
     }
 
     if (isThisWeek && (row.task_key === "generic_post" || row.task_key === "company_mention_post")) {
@@ -219,6 +250,13 @@ export async function getManualCompletionActivity(
       if (row.task_key === "generic_post") entry.generic += row.count;
       else entry.company_mention += row.count;
       postsByAccount.set(row.reddit_account_id, entry);
+
+      const byDay = postsByAccountByDay.get(row.reddit_account_id) ?? new Map<string, { generic: number; company_mention: number }>();
+      const dayEntry = byDay.get(row.task_date) ?? { generic: 0, company_mention: 0 };
+      if (row.task_key === "generic_post") dayEntry.generic = row.count;
+      else dayEntry.company_mention = row.count;
+      byDay.set(row.task_date, dayEntry);
+      postsByAccountByDay.set(row.reddit_account_id, byDay);
     }
 
     if (row.task_key === "generic_post") {
@@ -259,5 +297,7 @@ export async function getManualCompletionActivity(
     lastGenericPostAt,
     lastCompanyMentionPostAt,
     genericPostsSinceLastCompanyMention,
+    commentsByAccountByDay,
+    postsByAccountByDay,
   };
 }

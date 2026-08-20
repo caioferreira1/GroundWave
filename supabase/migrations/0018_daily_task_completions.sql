@@ -7,11 +7,12 @@
 -- comment_type/post_type on posts/post_generations) before computing
 -- remaining quotas, so a checked-off task reduces what's asked for
 -- tomorrow and moves the weekly progress meters, exactly like real logged
--- activity would. It's still a separate, self-reported source though — see
--- that comment for the double-counting caveat if the same work later also
--- gets logged for real. One row per (account, task type, day) that's been
--- checked off; unchecking deletes the row rather than storing completed =
--- false.
+-- activity would. It's still a separate, self-reported source, but
+-- mergeActivity() de-dupes per calendar day (max of the two sources, not
+-- their sum), so the same day's work doesn't count twice even if it later
+-- also gets logged for real. One row per (account, task type, day) that's
+-- been checked off; unchecking deletes the row rather than storing
+-- completed = false.
 
 create table public.daily_task_completions (
   id uuid primary key default gen_random_uuid(),

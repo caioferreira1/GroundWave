@@ -14,8 +14,9 @@
  * mergeActivity() before any of this runs, so a checked-off task counts the
  * same as real tagged activity everywhere below — it reduces tomorrow's
  * remaining quota and moves the weekly progress meters. It's a
- * self-reported source layered on top of the real one though: if the same
- * work later also gets logged for real, it's counted twice.
+ * self-reported source layered on top of the real one, so mergeActivity()
+ * de-duplicates per calendar day (max of the two sources, not their sum) —
+ * see its own doc comment for why.
  */
 
 export type RedditAccountForRotation = {
@@ -51,6 +52,16 @@ export type WeekActivity = {
    * target post" rotation gate in computeCompanyMentionRotationStatus().
    */
   genericPostsSinceLastCompanyMention: Map<string, number>;
+  /**
+   * Same counts as commentsByAccount, but broken out per calendar day
+   * (YYYY-MM-DD, UTC) within this ISO week — reddit_account_id -> day ->
+   * counts. Lets mergeActivity() de-duplicate a day where both a real
+   * tagged comment/post AND a manual checklist completion exist, instead of
+   * summing them.
+   */
+  commentsByAccountByDay: Map<string, Map<string, { generic: number; target: number }>>;
+  /** Same as commentsByAccountByDay, for postsByAccount. */
+  postsByAccountByDay: Map<string, Map<string, { generic: number; company_mention: number }>>;
 };
 
 export type AccountDailyTask = {
@@ -90,25 +101,104 @@ function laterOf(a: string | null | undefined, b: string | null | undefined): st
   return new Date(a).getTime() >= new Date(b).getTime() ? a : b;
 }
 
-/** Adds `extra` (e.g. manual completions) on top of `base` (real tagged activity) — same shape in, same shape out, so every function below stays oblivious to where the numbers came from. */
-export function mergeActivity(base: WeekActivity, extra: WeekActivity): WeekActivity {
-  const commentsByAccount = new Map(base.commentsByAccount);
-  for (const [accountId, extraCounts] of extra.commentsByAccount) {
-    const current = commentsByAccount.get(accountId) ?? { generic: 0, target: 0 };
-    commentsByAccount.set(accountId, {
-      generic: current.generic + extraCounts.generic,
-      target: current.target + extraCounts.target,
-    });
+/**
+ * Merges per-day count maps by taking, for every (account, day) present in
+ * either side, the MAX of the two sources rather than their sum — the two
+ * sides describe the same real-world unit of work (e.g. "3 target comments
+ * today") reported two different ways (checked off on the checklist vs.
+ * tagged for real via "mark posted"/"log manual comment"), not two
+ * additional units of work. Whichever source claims more for a given day
+ * wins for that day; days are then summed to get the week total.
+ */
+function mergeCommentDayMaps(
+  base: Map<string, Map<string, { generic: number; target: number }>>,
+  extra: Map<string, Map<string, { generic: number; target: number }>>,
+): Map<string, Map<string, { generic: number; target: number }>> {
+  const result = new Map<string, Map<string, { generic: number; target: number }>>();
+  for (const accountId of new Set([...base.keys(), ...extra.keys()])) {
+    const baseDays = base.get(accountId);
+    const extraDays = extra.get(accountId);
+    const byDay = new Map<string, { generic: number; target: number }>();
+    for (const day of new Set([...(baseDays?.keys() ?? []), ...(extraDays?.keys() ?? [])])) {
+      const b = baseDays?.get(day) ?? { generic: 0, target: 0 };
+      const e = extraDays?.get(day) ?? { generic: 0, target: 0 };
+      byDay.set(day, { generic: Math.max(b.generic, e.generic), target: Math.max(b.target, e.target) });
+    }
+    result.set(accountId, byDay);
   }
+  return result;
+}
 
-  const postsByAccount = new Map(base.postsByAccount);
-  for (const [accountId, extraCounts] of extra.postsByAccount) {
-    const current = postsByAccount.get(accountId) ?? { generic: 0, company_mention: 0 };
-    postsByAccount.set(accountId, {
-      generic: current.generic + extraCounts.generic,
-      company_mention: current.company_mention + extraCounts.company_mention,
-    });
+/** Same de-duplication as mergeCommentDayMaps, for the generic/company_mention post shape. */
+function mergePostDayMaps(
+  base: Map<string, Map<string, { generic: number; company_mention: number }>>,
+  extra: Map<string, Map<string, { generic: number; company_mention: number }>>,
+): Map<string, Map<string, { generic: number; company_mention: number }>> {
+  const result = new Map<string, Map<string, { generic: number; company_mention: number }>>();
+  for (const accountId of new Set([...base.keys(), ...extra.keys()])) {
+    const baseDays = base.get(accountId);
+    const extraDays = extra.get(accountId);
+    const byDay = new Map<string, { generic: number; company_mention: number }>();
+    for (const day of new Set([...(baseDays?.keys() ?? []), ...(extraDays?.keys() ?? [])])) {
+      const b = baseDays?.get(day) ?? { generic: 0, company_mention: 0 };
+      const e = extraDays?.get(day) ?? { generic: 0, company_mention: 0 };
+      byDay.set(day, {
+        generic: Math.max(b.generic, e.generic),
+        company_mention: Math.max(b.company_mention, e.company_mention),
+      });
+    }
+    result.set(accountId, byDay);
   }
+  return result;
+}
+
+function sumCommentDays(byDay: Map<string, Map<string, { generic: number; target: number }>>): Map<string, { generic: number; target: number }> {
+  const result = new Map<string, { generic: number; target: number }>();
+  for (const [accountId, days] of byDay) {
+    let generic = 0;
+    let target = 0;
+    for (const counts of days.values()) {
+      generic += counts.generic;
+      target += counts.target;
+    }
+    result.set(accountId, { generic, target });
+  }
+  return result;
+}
+
+function sumPostDays(byDay: Map<string, Map<string, { generic: number; company_mention: number }>>): Map<string, { generic: number; company_mention: number }> {
+  const result = new Map<string, { generic: number; company_mention: number }>();
+  for (const [accountId, days] of byDay) {
+    let generic = 0;
+    let company_mention = 0;
+    for (const counts of days.values()) {
+      generic += counts.generic;
+      company_mention += counts.company_mention;
+    }
+    result.set(accountId, { generic, company_mention });
+  }
+  return result;
+}
+
+/**
+ * Adds `extra` (e.g. manual daily_task_completions checkbox counts) on top
+ * of `base` (real tagged activity) — same shape in, same shape out, so
+ * every function below stays oblivious to where the numbers came from.
+ *
+ * Comment/post counts are de-duplicated per calendar day (see
+ * mergeCommentDayMaps/mergePostDayMaps): if the same account+type has both a
+ * real tagged entry AND a manual checklist completion on the same day, that
+ * day only counts once (the larger of the two), rather than adding them
+ * together. This is what makes checking a checklist box, marking a comment
+ * posted on the post page, and adding one manually all count toward the
+ * weekly goal exactly once each, no matter which combination of those was
+ * used for a given day's task.
+ */
+export function mergeActivity(base: WeekActivity, extra: WeekActivity): WeekActivity {
+  const commentsByAccountByDay = mergeCommentDayMaps(base.commentsByAccountByDay, extra.commentsByAccountByDay);
+  const postsByAccountByDay = mergePostDayMaps(base.postsByAccountByDay, extra.postsByAccountByDay);
+  const commentsByAccount = sumCommentDays(commentsByAccountByDay);
+  const postsByAccount = sumPostDays(postsByAccountByDay);
 
   const lastGenericPostAt = new Map(base.lastGenericPostAt);
   for (const [accountId, extraIso] of extra.lastGenericPostAt) {
@@ -134,6 +224,8 @@ export function mergeActivity(base: WeekActivity, extra: WeekActivity): WeekActi
     lastGenericPostAt,
     lastCompanyMentionPostAt,
     genericPostsSinceLastCompanyMention,
+    commentsByAccountByDay,
+    postsByAccountByDay,
   };
 }
 
