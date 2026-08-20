@@ -201,130 +201,128 @@ export function PostCard({
           )}
           {post.ai_error && <p className="text-xs text-destructive">{post.ai_error}</p>}
 
-          {post.is_relevant && (
-            <div className="space-y-2 rounded-lg border border-primary/15 bg-accent p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-medium tracking-wide text-accent-foreground uppercase">
-                  Reply draft
-                </span>
-                {post.comment_posted_at && (
-                  <Badge variant="good">
-                    Posted{postedByName && ` by ${postedByName}`}
-                    {accountName && ` · u/${accountName}`}
-                    {post.comment_type && ` · ${post.comment_type}`}
-                  </Badge>
-                )}
-              </div>
-
-              {isStaff && post.comment_posted_at && (
-                <form action={setCommentViewsAction} className="flex items-center gap-2">
-                  <label className="text-xs text-muted-foreground" htmlFor={`views-${post.id}`}>
-                    Views
-                  </label>
-                  <Input
-                    id={`views-${post.id}`}
-                    type="number"
-                    name="comment_views_count"
-                    min={0}
-                    defaultValue={post.comment_views_count ?? ""}
-                    className="h-8 w-24 text-xs"
-                  />
-                  <SubmitButton variant="secondary" size="sm" pendingText="Saving…">
-                    Save
-                  </SubmitButton>
-                </form>
-              )}
-
-              {post.generated_comment ? (
-                isStaff ? (
-                  <form action={saveGeneratedCommentAction} className="space-y-2">
-                    <Textarea
-                      name="generated_comment"
-                      rows={3}
-                      defaultValue={post.generated_comment}
-                      className="text-sm"
-                    />
-                    <SubmitButton variant="secondary" size="sm" pendingText="Saving…">
-                      Save edits
-                    </SubmitButton>
-                  </form>
-                ) : (
-                  <p className="text-sm text-foreground">{post.generated_comment}</p>
-                )
-              ) : (
-                !isStaff && <p className="text-xs text-muted-foreground">No reply drafted yet.</p>
-              )}
-
-              {isStaff && (
-                <div className="flex flex-wrap items-center gap-2">
-                  {!post.is_manual && (
-                    <form action={generateCommentAction} className="flex items-center gap-2">
-                      <SubmitButton variant="secondary" size="sm" pendingText="Generating…">
-                        {post.generated_comment ? "Regenerate" : "Generate reply"}
-                      </SubmitButton>
-                    </form>
-                  )}
-
-                  {post.generated_comment &&
-                    (post.comment_posted_at ? (
-                      <form action={unmarkCommentPostedAction}>
-                        <SubmitButton variant="ghost" size="sm" pendingText="Unmarking…">
-                          Unmark as posted
-                        </SubmitButton>
-                      </form>
-                    ) : (
-                      <form
-                        action={markCommentPostedAction}
-                        className="flex flex-wrap items-center gap-2"
-                      >
-                        <Select
-                          name="posted_by"
-                          defaultValue={currentUserId ?? ""}
-                          required
-                          className="h-8 w-auto text-xs"
-                        >
-                          <option value="" disabled>
-                            Who posted this?
-                          </option>
-                          {staffMembers.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.display_name ?? s.email}
-                            </option>
-                          ))}
-                        </Select>
-                        {activeAccounts.length > 0 && (
-                          <>
-                            <Select
-                              name="reddit_account_id"
-                              defaultValue=""
-                              className="h-8 w-auto text-xs"
-                            >
-                              <option value="">No account tracked</option>
-                              {activeAccounts.map((a) => (
-                                <option key={a.id} value={a.id}>
-                                  u/{a.account_name}
-                                </option>
-                              ))}
-                            </Select>
-                            <Select
-                              name="comment_type"
-                              defaultValue="target"
-                              className="h-8 w-auto text-xs"
-                            >
-                              <option value="target">Target (mentions/contributes)</option>
-                              <option value="generic">Generic</option>
-                            </Select>
-                          </>
-                        )}
-                        <SubmitButton variant="secondary" size="sm" pendingText="Marking…">
-                          Mark as posted
-                        </SubmitButton>
-                      </form>
-                    ))}
-                </div>
+          <div className="space-y-2 rounded-lg border border-primary/15 bg-accent p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium tracking-wide text-accent-foreground uppercase">
+                Reply draft
+              </span>
+              {post.comment_posted_at && (
+                <Badge variant="good">
+                  Posted{postedByName && ` by ${postedByName}`}
+                  {accountName && ` · u/${accountName}`}
+                  {post.comment_type && ` · ${post.comment_type}`}
+                </Badge>
               )}
             </div>
-          )}
+
+            {isStaff && post.comment_posted_at && (
+              <form action={setCommentViewsAction} className="flex items-center gap-2">
+                <label className="text-xs text-muted-foreground" htmlFor={`views-${post.id}`}>
+                  Views
+                </label>
+                <Input
+                  id={`views-${post.id}`}
+                  type="number"
+                  name="comment_views_count"
+                  min={0}
+                  defaultValue={post.comment_views_count ?? ""}
+                  className="h-8 w-24 text-xs"
+                />
+                <SubmitButton variant="secondary" size="sm" pendingText="Saving…">
+                  Save
+                </SubmitButton>
+              </form>
+            )}
+
+            {post.generated_comment ? (
+              isStaff ? (
+                <form action={saveGeneratedCommentAction} className="space-y-2">
+                  <Textarea
+                    name="generated_comment"
+                    rows={3}
+                    defaultValue={post.generated_comment}
+                    className="text-sm"
+                  />
+                  <SubmitButton variant="secondary" size="sm" pendingText="Saving…">
+                    Save edits
+                  </SubmitButton>
+                </form>
+              ) : (
+                <p className="text-sm text-foreground">{post.generated_comment}</p>
+              )
+            ) : (
+              !isStaff && <p className="text-xs text-muted-foreground">No reply drafted yet.</p>
+            )}
+
+            {isStaff && (
+              <div className="flex flex-wrap items-center gap-2">
+                {!post.is_manual && (
+                  <form action={generateCommentAction} className="flex items-center gap-2">
+                    <SubmitButton variant="secondary" size="sm" pendingText="Generating…">
+                      {post.generated_comment ? "Regenerate" : "Generate reply"}
+                    </SubmitButton>
+                  </form>
+                )}
+
+                {post.generated_comment &&
+                  (post.comment_posted_at ? (
+                    <form action={unmarkCommentPostedAction}>
+                      <SubmitButton variant="ghost" size="sm" pendingText="Unmarking…">
+                        Unmark as posted
+                      </SubmitButton>
+                    </form>
+                  ) : (
+                    <form
+                      action={markCommentPostedAction}
+                      className="flex flex-wrap items-center gap-2"
+                    >
+                      <Select
+                        name="posted_by"
+                        defaultValue={currentUserId ?? ""}
+                        required
+                        className="h-8 w-auto text-xs"
+                      >
+                        <option value="" disabled>
+                          Who posted this?
+                        </option>
+                        {staffMembers.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.display_name ?? s.email}
+                          </option>
+                        ))}
+                      </Select>
+                      {activeAccounts.length > 0 && (
+                        <>
+                          <Select
+                            name="reddit_account_id"
+                            defaultValue=""
+                            className="h-8 w-auto text-xs"
+                          >
+                            <option value="">No account tracked</option>
+                            {activeAccounts.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                u/{a.account_name}
+                              </option>
+                            ))}
+                          </Select>
+                          <Select
+                            name="comment_type"
+                            defaultValue="target"
+                            className="h-8 w-auto text-xs"
+                          >
+                            <option value="target">Target (mentions/contributes)</option>
+                            <option value="generic">Generic</option>
+                          </Select>
+                        </>
+                      )}
+                      <SubmitButton variant="secondary" size="sm" pendingText="Marking…">
+                        Mark as posted
+                      </SubmitButton>
+                    </form>
+                  ))}
+              </div>
+            )}
+          </div>
 
           {isStaff && !post.is_manual && (
             <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">

@@ -1,7 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { callAiGateway, parseJsonResponse } from "@/lib/ai/gateway";
-import { POST_GENERATOR_SUBREDDITS } from "@/lib/reddit/subreddits";
 import { cleanComment } from "@/lib/ai/reply-generator";
 
 export interface GeneratedPostGeneration {
@@ -104,7 +103,17 @@ export async function generatePostGeneration(
     subreddit =
       company.suggested_subreddits[Math.floor(Math.random() * company.suggested_subreddits.length)];
   } else {
-    subreddit = POST_GENERATOR_SUBREDDITS[Math.floor(Math.random() * POST_GENERATOR_SUBREDDITS.length)];
+    const { data: genericSettings, error: genericSettingsError } = await admin
+      .from("generic_post_generator_settings")
+      .select("subreddits")
+      .eq("id", 1)
+      .maybeSingle();
+    if (genericSettingsError) throw new Error(genericSettingsError.message);
+    if (!genericSettings || genericSettings.subreddits.length === 0) {
+      throw new Error("No subreddits configured for the generic post generator yet");
+    }
+
+    subreddit = genericSettings.subreddits[Math.floor(Math.random() * genericSettings.subreddits.length)];
   }
 
   const nonce = Math.random().toString(36).slice(2, 10);

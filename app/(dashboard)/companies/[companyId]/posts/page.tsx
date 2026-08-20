@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { MessagesSquare } from "lucide-react";
+import { CheckCircle2, FileText, MessagesSquare, ThumbsUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getApifyAccountUsage } from "@/lib/reddit/apify";
 import {
@@ -10,6 +10,7 @@ import {
   PageHeading,
   SegmentedControl,
   SegmentedControlLink,
+  StatCard,
   buttonClass,
 } from "@/components/ui";
 import { ManualCommentDialog } from "@/components/posts/manual-comment-dialog";
@@ -112,7 +113,25 @@ export default async function CompanyPostsPage({
         : query.is("comment_posted_at", null);
   }
 
-  const { data: posts } = await query;
+  // Company-wide totals for the summary cards — deliberately unfiltered by
+  // the status/relevant/answered filters above (and not capped at the
+  // `posts` query's 100-row limit) so they read as a stable overview
+  // regardless of which slice is currently shown below.
+  const [{ data: posts }, { count: totalCount }, { count: relevantCount }, { count: answeredCount }] =
+    await Promise.all([
+      query,
+      supabase.from("posts").select("id", { count: "exact", head: true }).eq("company_id", companyId),
+      supabase
+        .from("posts")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId)
+        .eq("is_relevant", true),
+      supabase
+        .from("posts")
+        .select("id", { count: "exact", head: true })
+        .eq("company_id", companyId)
+        .not("comment_posted_at", "is", null),
+    ]);
 
   // Who's eligible to be credited as "posted this comment" — staff only,
   // since only staff post replies on Reddit. Kept for future per-poster
@@ -172,6 +191,24 @@ export default async function CompanyPostsPage({
             accounts={activeAccounts}
           />
         )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          icon={FileText}
+          label="Total posts"
+          value={<span className="text-2xl font-semibold text-foreground">{totalCount ?? 0}</span>}
+        />
+        <StatCard
+          icon={ThumbsUp}
+          label="Relevant"
+          value={<span className="text-2xl font-semibold text-foreground">{relevantCount ?? 0}</span>}
+        />
+        <StatCard
+          icon={CheckCircle2}
+          label="Answered"
+          value={<span className="text-2xl font-semibold text-foreground">{answeredCount ?? 0}</span>}
+        />
       </div>
 
       {isStaff && (

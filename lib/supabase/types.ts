@@ -238,6 +238,16 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["daily_task_completions"]["Row"]>;
         Relationships: [];
       };
+      generic_post_generator_settings: {
+        Row: {
+          id: number;
+          subreddits: string[];
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["generic_post_generator_settings"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["generic_post_generator_settings"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

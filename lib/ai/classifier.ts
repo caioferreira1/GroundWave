@@ -34,46 +34,37 @@ async function loadCorrectionExamples(companyId: string): Promise<string> {
   return `\n\nCORRECTED EXAMPLES (team feedback — treat these as ground truth for this company):\n${lines.join("\n")}`;
 }
 
-const SYSTEM_PROMPT_TEMPLATE = (profile: string) => `You are a strict relevance filter. You decide whether a social media post is worth the company's time to engage with. Your bias is toward REJECTION — false negatives are fine, false positives waste the company's time.
+const RELEVANCE_THRESHOLD = 50;
 
-Use ONLY the Company Profile below as ground truth. Do not use outside knowledge to justify why a post "might" be relevant.
+const SYSTEM_PROMPT_TEMPLATE = (profile: string) => `You are a relevance filter. You decide whether a social media post is worth the company's time to engage with.
+
+Use ONLY the Company Profile below as ground truth. Do not invent exclusions that are not written in it — if the profile does not explicitly rule out a topic or audience, do not rule it out yourself just because it seems less valuable to you.
 
 === COMPANY PROFILE ===
 ${profile || "(No company profile configured yet — mark everything as not relevant.)"}
 === END COMPANY PROFILE ===
 
-You MUST evaluate the post through THREE SEQUENTIAL GATES. If any gate fails, the post is NOT relevant. Do not try to be generous.
+Give the post a single relevance_score from 0 to 100 for how worth engaging with it is, weighing three things together (none of them is a pass/fail switch on its own — weak or unclear signals should pull the score down a bit, not zero it out):
 
-GATE 1 — TOPIC (on_topic):
-Is the post about a CORE TOPIC the company directly addresses (per "Core Topics" in the profile)?
-- FAIL if the post is about an "Adjacent Topic" or matches any "What to Ignore" example, even if it uses keywords from the company's space.
-- FAIL if the topic is only tangentially mentioned or the post is really about something else.
+- TOPIC: is the post about a core topic the company addresses (per "Core Topics" in the profile)? This matters most. Only score low here if the post matches a "What to Ignore" example or is really about something else entirely — adjacent topics that plausibly overlap still count.
+- AUDIENCE: does the author plausibly match the "Ideal Customer Profile" in the profile? Give the benefit of the doubt — only lower the score if the author is clearly and explicitly outside the ICP, or the profile explicitly excludes this kind of audience. No signal about the author is not a reason to lower it.
+- INTENT: is the author asking a question, describing a pain point, requesting a recommendation, comparing options, venting a frustration, or otherwise engaging in discussion that maps to what the company solves? Explicit asks are not required. Only lower the score for pure self-promotion, job ads, or content with no discussion angle at all (e.g. a plain news link with no commentary).
 
-GATE 2 — AUDIENCE (author_matches_audience):
-Does the author plausibly match the "Ideal Customer Profile" in the company profile (role, career stage, situation)?
-- FAIL if the author is clearly outside the ICP.
-- If the post gives no signal about the author, default to PASS only when the content itself is a strong core-topic buyer signal; otherwise FAIL.
+When in doubt, score it higher rather than lower — the cost of missing a genuinely relevant post is worse than the cost of surfacing a borderline one for a human to skip.
 
-GATE 3 — INTENT (has_active_intent):
-Is the author ACTIVELY doing one of: asking a question, describing a pain point, requesting a recommendation, comparing options, or venting a frustration that maps to what the company solves?
-- FAIL if the post is a news share, opinion piece, self-promotion, job ad, resource dump, motivational content, or passive discussion with no ask.
+SCORING GUIDE:
+- 0-30: off-topic, or matches a "What to Ignore" example.
+- 30-50: on-topic but the audience or intent signal is weak or off.
+- 50-70: on-topic, plausible audience, some discussion angle, but signals are ambiguous.
+- 70-90: clearly on-topic with a real pain point, question, or comparison, and a plausible audience.
+- 90-100: all three line up strongly, ideally with an explicit ask for a tool/service/solution the company provides.
 
-SCORING (relevance_score 0-100):
-- 0-30:  Fails Gate 1 (off-topic / adjacent / ignored category).
-- 30-50: Passes Gate 1 but fails Gate 2 OR Gate 3.
-- 50-70: Passes all 3 gates but signals are weak or ambiguous.
-- 70-90: Passes all 3 gates with a clear pain point, question, or comparison directly about the company's core topic.
-- 90-100: Passes all 3 gates AND the author explicitly asks for a tool/service/solution the company provides.
+is_relevant = true when relevance_score >= ${RELEVANCE_THRESHOLD}, false otherwise.
 
-FINAL DECISION:
-- is_relevant = true ONLY when on_topic=true AND author_matches_audience=true AND has_active_intent=true AND relevance_score >= 70.
-- Otherwise is_relevant = false.
-- When in doubt, mark false.
-
-REASONING: one short English sentence. If is_relevant=false, cite which gate failed and why.
+REASONING: one short English sentence covering topic/audience/intent in brief. If the score is low, say what pulled it down.
 
 Reply ONLY with valid JSON, no extra text:
-{"post_topic":"...","on_topic":true|false,"author_matches_audience":true|false,"has_active_intent":true|false,"is_relevant":true|false,"relevance_score":0-100,"reasoning":"..."}`;
+{"post_topic":"...","is_relevant":true|false,"relevance_score":0-100,"reasoning":"..."}`;
 
 /**
  * Classifies one post's relevance for its company and writes the result
@@ -104,22 +95,12 @@ export async function classifyPost(post: {
       responseFormat: "json_object",
     });
 
-    const parsed = parseJsonResponse<
-      ClassificationResult & {
-        on_topic?: boolean;
-        author_matches_audience?: boolean;
-        has_active_intent?: boolean;
-      }
-    >(content);
+    const parsed = parseJsonResponse<ClassificationResult>(content);
 
-    // Enforce the 3-gate + threshold rule server-side too (defense against
-    // the model returning is_relevant=true while a gate flag is false).
+    // Enforce the threshold server-side too (defense against the model
+    // returning is_relevant=true with a score below the cutoff, or vice versa).
     const score = Math.max(0, Math.min(100, Math.round(Number(parsed.relevance_score) || 0)));
-    const gatesPassed =
-      parsed.on_topic !== false &&
-      parsed.author_matches_audience !== false &&
-      parsed.has_active_intent !== false;
-    const isRelevant = Boolean(parsed.is_relevant) && gatesPassed && score >= 70;
+    const isRelevant = score >= RELEVANCE_THRESHOLD;
 
     await admin
       .from("posts")

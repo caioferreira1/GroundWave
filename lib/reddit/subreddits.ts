@@ -1,9 +1,10 @@
-// Fixed subreddit list for generic-mode post generation (no company
-// targeting). Ported from the reference app's playbook "Post Creator" data
-// table. Client-safe (no server-only import) so it can be imported from
-// both server actions and, if ever needed, client components.
+// Seed list for generic-mode post generation (no company targeting) — used
+// only to populate `generic_post_generator_settings` in the migration. The
+// list actually used at generation time is configurable by staff and lives
+// in that table (see lib/ai/post-generator.ts). Ported from the reference
+// app's playbook "Post Creator" data table.
 
-export const POST_GENERATOR_SUBREDDITS = [
+export const DEFAULT_POST_GENERATOR_SUBREDDITS = [
   "asktheworld",
   "askabrazilian",
   "askagerman",

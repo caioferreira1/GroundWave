@@ -1,11 +1,12 @@
 import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { EmptyState, PageHeading } from "@/components/ui";
+import { Card, CardContent, CardHeader, CardTitle, EmptyState, PageHeading } from "@/components/ui";
 import { GenerationPanel } from "@/components/post-generator/generation-panel";
 import { PostGenerationCard } from "@/components/post-generator/post-generation-card";
 import { HistoryList } from "@/components/post-generator/history-list";
+import { SubredditsManager } from "@/components/post-generator/subreddits-manager";
 import type { PostGenerationRow } from "@/components/post-generator/types";
-import { generatePost, deletePostGeneration } from "./actions";
+import { generatePost, deletePostGeneration, addGenericSubreddit, removeGenericSubreddit } from "./actions";
 
 export default async function GenericPostGeneratorPage() {
   const supabase = await createClient();
@@ -25,6 +26,10 @@ export default async function GenericPostGeneratorPage() {
     .order("created_at", { ascending: false })
     .limit(20);
 
+  const { data: genericSettings } = isStaff
+    ? await supabase.from("generic_post_generator_settings").select("subreddits").eq("id", 1).maybeSingle()
+    : { data: null };
+
   const posts: PostGenerationRow[] = (data ?? []).map((row) => ({
     ...row,
     posted_at: null,
@@ -41,6 +46,21 @@ export default async function GenericPostGeneratorPage() {
         title="Post Generator"
         description="Generate authentic Reddit posts with AI. Each one picks a random subreddit and theme, no company targeting."
       />
+
+      {isStaff ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Subreddits</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SubredditsManager
+              subreddits={genericSettings?.subreddits ?? []}
+              addAction={addGenericSubreddit}
+              removeAction={removeGenericSubreddit}
+            />
+          </CardContent>
+        </Card>
+      ) : null}
 
       {isStaff ? (
         <GenerationPanel action={generatePost} hasFeatured={Boolean(featured)}>
