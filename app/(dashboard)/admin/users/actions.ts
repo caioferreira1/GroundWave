@@ -12,6 +12,18 @@ export async function setUserStatus(userId: string, status: "approved" | "denied
   revalidatePath("/admin/users");
 }
 
+export async function setUserDisplayName(userId: string, formData: FormData) {
+  await requireAdmin();
+  const displayName = String(formData.get("displayName") ?? "").trim();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("profiles")
+    .update({ display_name: displayName || null })
+    .eq("id", userId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/users");
+}
+
 export async function setUserRole(userId: string, role: "admin" | "coworker" | "client") {
   await requireAdmin();
   const supabase = await createClient();

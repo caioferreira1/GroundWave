@@ -6,6 +6,13 @@ import type { SeriesSpec } from "./trend-chart";
 
 type ChartDatum = Record<string, string | number>;
 
+const MAX_LABEL_CHARS = 13;
+
+/** ChartContainer sets `overflow-visible` on the SVG surface (so rounded bar caps/tooltips at the edge aren't clipped) — a category label longer than the allotted axis width would otherwise bleed out past the card instead of just getting cut off, so it's truncated here before Recharts ever lays it out. The full value still shows on hover via ChartTooltipContent, which reads the untruncated data. */
+function truncateLabel(value: string) {
+  return value.length > MAX_LABEL_CHARS ? `${value.slice(0, MAX_LABEL_CHARS - 1)}…` : value;
+}
+
 /** Horizontal bar chart for categorical breakdowns (by subreddit, by collaborator) — one or more series grouped per category. */
 export function CategoryBarChart({
   data,
@@ -32,6 +39,7 @@ export function CategoryBarChart({
           axisLine={false}
           width={92}
           tick={{ fontSize: 11, fill: "var(--color-muted-foreground)" }}
+          tickFormatter={truncateLabel}
         />
         <ChartTooltip cursor={{ fill: "var(--color-muted)", opacity: 0.3 }} content={<ChartTooltipContent />} />
         {series.map((s) => (

@@ -4,7 +4,6 @@ import { getAllRedditAccountsForCompany } from "@/lib/activity/accounts";
 import { EmptyState, PageHeading } from "@/components/ui";
 import { GenerationPanel } from "@/components/post-generator/generation-panel";
 import { PostGenerationCard } from "@/components/post-generator/post-generation-card";
-import { HistoryList } from "@/components/post-generator/history-list";
 import type { PostGenerationActions, PostGenerationRow } from "@/components/post-generator/types";
 import {
   generatePost,
@@ -71,7 +70,6 @@ export default async function CompanyPostGeneratorPage({
     post_type: row.post_type,
     views_count: row.views_count,
   }));
-  const [featured, ...history] = posts;
 
   const boundGenerate = generatePost.bind(null, companyId);
   const boundDelete = deletePostGeneration.bind(null, companyId);
@@ -94,22 +92,21 @@ export default async function CompanyPostGeneratorPage({
       />
 
       {isStaff ? (
-        <GenerationPanel action={boundGenerate} hasFeatured={Boolean(featured)}>
-          {featured ? (
-            <div className="space-y-6">
-              <PostGenerationCard post={featured} actions={postGenerationActions} />
-              <HistoryList posts={history} deleteAction={boundDelete} actions={postGenerationActions} />
-            </div>
-          ) : (
+        <GenerationPanel
+          action={boundGenerate}
+          posts={posts}
+          deleteAction={boundDelete}
+          actions={postGenerationActions}
+          emptyState={
             <EmptyState
               icon={Sparkles}
               title="No posts yet"
               description='Click "Generate Post" to create the first Reddit post for this company.'
             />
-          )}
-        </GenerationPanel>
-      ) : featured ? (
-        <PostGenerationCard post={featured} />
+          }
+        />
+      ) : posts[0] ? (
+        <PostGenerationCard post={posts[0]} />
       ) : (
         <EmptyState icon={Sparkles} title="No posts yet" description="No Reddit posts have been generated yet." />
       )}

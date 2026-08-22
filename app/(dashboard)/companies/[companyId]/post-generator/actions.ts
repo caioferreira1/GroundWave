@@ -8,9 +8,11 @@ import { generatePostGeneration } from "@/lib/ai/post-generator";
 export async function generatePost(companyId: string) {
   const { user } = await requireStaff();
 
-  await generatePostGeneration({ mode: "company", companyId, createdBy: user.id });
+  const generation = await generatePostGeneration({ mode: "company", companyId, createdBy: user.id });
 
   revalidatePath(`/companies/${companyId}/post-generator`);
+
+  return { id: generation.id };
 }
 
 export async function deletePostGeneration(companyId: string, id: string) {
@@ -73,7 +75,7 @@ export async function unmarkPostGenerationPosted(companyId: string, id: string) 
   const supabase = await createClient();
   const { error } = await supabase
     .from("post_generations")
-    .update({ posted_at: null, posted_by: null })
+    .update({ posted_at: null, posted_by: null, views_count: null })
     .eq("id", id)
     .eq("company_id", companyId);
   if (error) throw new Error(error.message);

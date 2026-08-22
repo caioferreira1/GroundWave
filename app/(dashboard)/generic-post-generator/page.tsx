@@ -4,7 +4,6 @@ import { getCompaniesForAccounts } from "@/lib/activity/accounts";
 import { Card, CardContent, CardHeader, CardTitle, EmptyState, PageHeading } from "@/components/ui";
 import { GenerationPanel } from "@/components/post-generator/generation-panel";
 import { PostGenerationCard } from "@/components/post-generator/post-generation-card";
-import { HistoryList } from "@/components/post-generator/history-list";
 import { SubredditsManager } from "@/components/post-generator/subreddits-manager";
 import type { PostGenerationActions, PostGenerationRow } from "@/components/post-generator/types";
 import {
@@ -82,7 +81,6 @@ export default async function GenericPostGeneratorPage() {
     post_type: row.post_type,
     views_count: row.views_count,
   }));
-  const [featured, ...history] = posts;
 
   const postGenerationActions: PostGenerationActions = {
     isStaff,
@@ -117,22 +115,21 @@ export default async function GenericPostGeneratorPage() {
       ) : null}
 
       {isStaff ? (
-        <GenerationPanel action={generatePost} hasFeatured={Boolean(featured)}>
-          {featured ? (
-            <div className="space-y-6">
-              <PostGenerationCard post={featured} actions={postGenerationActions} />
-              <HistoryList posts={history} deleteAction={deletePostGeneration} actions={postGenerationActions} />
-            </div>
-          ) : (
+        <GenerationPanel
+          action={generatePost}
+          posts={posts}
+          deleteAction={deletePostGeneration}
+          actions={postGenerationActions}
+          emptyState={
             <EmptyState
               icon={Sparkles}
               title="No posts yet"
               description='Click "Generate Post" to create your first Reddit post.'
             />
-          )}
-        </GenerationPanel>
-      ) : featured ? (
-        <PostGenerationCard post={featured} />
+          }
+        />
+      ) : posts[0] ? (
+        <PostGenerationCard post={posts[0]} />
       ) : (
         <EmptyState icon={Sparkles} title="No posts yet" description="No Reddit posts have been generated yet." />
       )}

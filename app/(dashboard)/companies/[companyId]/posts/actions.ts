@@ -237,7 +237,7 @@ export async function unmarkCommentPosted(companyId: string, postId: string) {
   const supabase = await createClient();
   const { error } = await supabase
     .from("posts")
-    .update({ comment_posted_at: null, comment_posted_by: null })
+    .update({ comment_posted_at: null, comment_posted_by: null, comment_views_count: null })
     .eq("id", postId);
   if (error) throw new Error(error.message);
 

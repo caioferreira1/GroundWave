@@ -78,8 +78,10 @@ export function PostedStatus({
           </Select>
           {actions.accounts.length > 0 && (
             <>
-              <Select name="reddit_account_id" defaultValue="" className="h-8 w-auto text-xs">
-                <option value="">No account tracked</option>
+              <Select name="reddit_account_id" defaultValue="" required className="h-8 w-auto text-xs">
+                <option value="" disabled>
+                  Which account?
+                </option>
                 {actions.accounts.map((a) => (
                   <option key={a.id} value={a.id}>
                     {accountLabel(a)}

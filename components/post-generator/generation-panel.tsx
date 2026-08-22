@@ -2,33 +2,43 @@
 
 import { Sparkles } from "lucide-react";
 import type { ReactNode } from "react";
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui";
 import { GenerateButton } from "./generate-button";
+import { PostGenerationList } from "./post-generation-list";
+import type { PostGenerationActions, PostGenerationRow } from "./types";
 
 /**
- * Owns the generate Server Action + pending state, and swaps the output
- * region for an animated "AI is generating" placeholder while it runs —
- * `children` is the server-rendered result (featured card + history, or the
- * empty state), which reappears once the action's `revalidatePath` refreshes
- * the page.
+ * Owns the generate Server Action + pending state, and swaps the post list
+ * for an animated "AI is generating" placeholder while it runs. Also owns
+ * `justGeneratedId` — the only thing that distinguishes the freshly
+ * generated post from the rest of the list (it starts expanded and
+ * highlighted). That id lives in this component's state, so it resets to
+ * null on remount: navigate away and back and every post, including the
+ * newest one, looks the same as the others.
  */
 export function GenerationPanel({
   action,
-  hasFeatured,
-  children,
+  posts,
+  deleteAction,
+  actions,
+  emptyState,
 }: {
-  action: () => Promise<void>;
-  hasFeatured: boolean;
-  children: ReactNode;
+  action: () => Promise<{ id: string }>;
+  posts: PostGenerationRow[];
+  deleteAction: (id: string) => Promise<void>;
+  actions?: PostGenerationActions;
+  emptyState: ReactNode;
 }) {
   const [isPending, startTransition] = useTransition();
+  const [justGeneratedId, setJustGeneratedId] = useState<string | null>(null);
 
   function handleGenerate() {
     startTransition(async () => {
       try {
-        await action();
+        const result = await action();
+        setJustGeneratedId(result.id);
         toast.success("Post generated!");
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to generate post.");
@@ -38,8 +48,14 @@ export function GenerationPanel({
 
   return (
     <div className="space-y-6">
-      <GenerateButton onClick={handleGenerate} pending={isPending} hasFeatured={hasFeatured} />
-      {isPending ? <GeneratingCard /> : children}
+      <GenerateButton onClick={handleGenerate} pending={isPending} hasFeatured={posts.length > 0} />
+      {isPending ? (
+        <GeneratingCard />
+      ) : posts.length > 0 ? (
+        <PostGenerationList posts={posts} justGeneratedId={justGeneratedId} deleteAction={deleteAction} actions={actions} />
+      ) : (
+        emptyState
+      )}
     </div>
   );
 }

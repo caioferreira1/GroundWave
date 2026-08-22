@@ -175,8 +175,12 @@ export async function getViewsTrend(
  * above. `postsPosted`/`commentsPosted` are deliberately target-only
  * (post_type='company_mention' / comment_type='target') — the headline
  * numbers on the company Overview page, unlike every chart below them, don't
- * mix in generic (non-company) activity. `reportedViews` is intentionally
- * left unfiltered (still sums generic + target), per product decision.
+ * mix in generic (non-company) activity. `reportedViews` intentionally
+ * still mixes in generic activity (unlike postsPosted/commentsPosted), per
+ * product decision — but, like every other query in this file, only counts
+ * rows that are actually posted (posted_at/comment_posted_at set), so a
+ * views value left behind by "unmark as posted" (see unmarkPostGenerationPosted
+ * / unmarkCommentPosted) never inflates the total.
  */
 export async function getOverviewTotals(
   supabase: SupabaseServerClient,
@@ -197,9 +201,14 @@ export async function getOverviewTotals(
       .eq("company_id", companyId)
       .eq("comment_type", "target")
       .not("comment_posted_at", "is", null),
-    supabase.from("post_generations").select("views_count").eq("company_id", companyId).eq("mode", "company"),
-    getGenericPostGenerations(supabase, accountIds, "views_count", { requirePostedAt: false }),
-    supabase.from("posts").select("comment_views_count").eq("company_id", companyId),
+    supabase
+      .from("post_generations")
+      .select("views_count")
+      .eq("company_id", companyId)
+      .eq("mode", "company")
+      .not("posted_at", "is", null),
+    getGenericPostGenerations(supabase, accountIds, "views_count"),
+    supabase.from("posts").select("comment_views_count").eq("company_id", companyId).not("comment_posted_at", "is", null),
   ]);
 
   const reportedViews =

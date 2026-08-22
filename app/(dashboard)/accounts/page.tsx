@@ -3,6 +3,7 @@ import { requireStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Badge, Card, CardContent, EmptyState, Field, Input, PageHeading, Select, SubmitButton, Switch } from "@/components/ui";
 import { CategoryBarChart } from "@/components/analytics/category-bar-chart";
+import { ChartCard } from "@/components/analytics/chart-card";
 import { ChartLegend } from "@/components/analytics/legend";
 import { AddAccountMenu } from "@/components/accounts/add-account-menu";
 import {
@@ -14,12 +15,6 @@ import {
 
 type Metric = { posts: number; comments: number };
 
-function addMetric(map: Map<string, Metric>, key: string, field: keyof Metric) {
-  const entry = map.get(key) ?? { posts: 0, comments: 0 };
-  entry[field] += 1;
-  map.set(key, entry);
-}
-
 function addCompanyMetric(map: Map<string, Map<string, Metric>>, accountId: string, companyId: string, field: keyof Metric) {
   const byCompany = map.get(accountId) ?? new Map<string, Metric>();
   const entry = byCompany.get(companyId) ?? { posts: 0, comments: 0 };
@@ -28,7 +23,7 @@ function addCompanyMetric(map: Map<string, Map<string, Metric>>, accountId: stri
   map.set(accountId, byCompany);
 }
 
-const activityLegend = [
+const postsCommentsLegend = [
   { label: "Posts", color: "var(--color-primary)" },
   { label: "Comments", color: "var(--color-accent-2)" },
 ];
@@ -79,35 +74,37 @@ export default async function AccountsPage() {
     companiesByAccount.set(link.reddit_account_id, list);
   }
 
-  // Generic activity is account-level, not company-level — it's cover
-  // content/comments keeping the account looking organic, regardless of
-  // which company's flow happened to generate it. Target/company-mention
-  // activity is the actual work product, broken out per linked company.
-  const genericByAccount = new Map<string, Metric>();
+  // Target/company-mention activity only — broken out per linked company,
+  // never summed across companies (generic activity isn't tied to any
+  // company, so it's left out of this page's chart entirely).
   const targetByAccountCompany = new Map<string, Map<string, Metric>>();
 
   for (const row of postGenerations ?? []) {
-    if (!row.reddit_account_id) continue;
-    if (row.post_type === "generic") {
-      addMetric(genericByAccount, row.reddit_account_id, "posts");
-    } else if (row.post_type === "company_mention" && row.company_id) {
-      addCompanyMetric(targetByAccountCompany, row.reddit_account_id, row.company_id, "posts");
-    }
+    if (!row.reddit_account_id || row.post_type !== "company_mention" || !row.company_id) continue;
+    addCompanyMetric(targetByAccountCompany, row.reddit_account_id, row.company_id, "posts");
   }
   for (const row of comments ?? []) {
-    if (!row.reddit_account_id) continue;
-    if (row.comment_type === "generic") {
-      addMetric(genericByAccount, row.reddit_account_id, "comments");
-    } else if (row.comment_type === "target" && row.company_id) {
-      addCompanyMetric(targetByAccountCompany, row.reddit_account_id, row.company_id, "comments");
-    }
+    if (!row.reddit_account_id || row.comment_type !== "target" || !row.company_id) continue;
+    addCompanyMetric(targetByAccountCompany, row.reddit_account_id, row.company_id, "comments");
   }
+
+  // Grouped by company — which accounts are linked to it, and each one's
+  // target activity (posts/comments) for that company specifically.
+  const companyChartData = (companies ?? []).map((company) => {
+    const rows = (accounts ?? [])
+      .filter((account) => (companiesByAccount.get(account.id) ?? []).includes(company.id))
+      .map((account) => {
+        const metric = targetByAccountCompany.get(account.id)?.get(company.id);
+        return { label: account.account_name, posts: metric?.posts ?? 0, comments: metric?.comments ?? 0 };
+      });
+    return { company, rows };
+  });
 
   return (
     <div className="max-w-3xl space-y-6">
       <PageHeading
         title="Accounts"
-        description="Every Reddit account across every company — who owns each one, which companies it's linked to, and its generic vs. per-company target activity."
+        description="Every Reddit account across every company — who owns each one and which companies it's linked to."
         action={<AddAccountMenu action={createRedditAccount} staffMembers={staffMembers} companies={companies ?? []} />}
       />
 
@@ -116,21 +113,6 @@ export default async function AccountsPage() {
           {(accounts ?? []).map((account) => {
             const linkedCompanyIds = companiesByAccount.get(account.id) ?? [];
             const unlinkedCompanies = (companies ?? []).filter((c) => !linkedCompanyIds.includes(c.id));
-            const generic = genericByAccount.get(account.id);
-            const targetByCompany = targetByAccountCompany.get(account.id);
-
-            const chartData = [
-              { label: "Generic", posts: generic?.posts ?? 0, comments: generic?.comments ?? 0 },
-              ...linkedCompanyIds.map((companyId) => {
-                const metric = targetByCompany?.get(companyId);
-                return {
-                  label: companyNameById.get(companyId) ?? "Unknown company",
-                  posts: metric?.posts ?? 0,
-                  comments: metric?.comments ?? 0,
-                };
-              }),
-            ];
-            const hasActivity = chartData.some((d) => d.posts > 0 || d.comments > 0);
 
             return (
               <Card key={account.id}>
@@ -202,26 +184,6 @@ export default async function AccountsPage() {
                       </form>
                     )}
                   </div>
-
-                  <div className="border-t border-border pt-3">
-                    <div className="flex items-center justify-between pb-1">
-                      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Activity</p>
-                      {hasActivity && <ChartLegend items={activityLegend} />}
-                    </div>
-                    {hasActivity ? (
-                      <div className="h-[100px]">
-                        <CategoryBarChart
-                          data={chartData}
-                          series={[
-                            { key: "posts", name: "Posts", color: "var(--color-primary)" },
-                            { key: "comments", name: "Comments", color: "var(--color-accent-2)" },
-                          ]}
-                        />
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">No posted activity yet.</p>
-                    )}
-                  </div>
                 </CardContent>
               </Card>
             );
@@ -229,6 +191,32 @@ export default async function AccountsPage() {
         </div>
       ) : (
         <EmptyState icon={Users} title="No accounts yet" description="Add a Reddit account above to get started." />
+      )}
+
+      {companyChartData.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-sm font-semibold text-foreground">Accounts by company</h2>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {companyChartData.map(({ company, rows }) => (
+              <ChartCard
+                key={company.id}
+                title={company.name}
+                description="Target posts/comments per linked account."
+                isEmpty={rows.length === 0}
+                emptyDescription="No accounts linked to this company yet."
+                legend={rows.length > 0 && <ChartLegend items={postsCommentsLegend} />}
+              >
+                <CategoryBarChart
+                  data={rows}
+                  series={[
+                    { key: "posts", name: "Posts", color: "var(--color-primary)" },
+                    { key: "comments", name: "Comments", color: "var(--color-accent-2)" },
+                  ]}
+                />
+              </ChartCard>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

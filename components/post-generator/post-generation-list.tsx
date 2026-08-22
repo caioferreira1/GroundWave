@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Trash2 } from "lucide-react";
+import { ChevronDown, Sparkles, Trash2 } from "lucide-react";
 import { Badge, Card, CopyButton, SubmitButton } from "@/components/ui";
 import { cx } from "@/lib/cx";
 import { PostedStatus } from "./posted-status";
@@ -18,26 +18,50 @@ function formatRelativeDate(dateStr: string): string {
   return `${days}d ago`;
 }
 
-export function HistoryList({
+/**
+ * Every generated post renders the same way here — nothing stays permanently
+ * "featured". `justGeneratedId` (owned by GenerationPanel, reset to null on
+ * remount) marks only the post from this browser session's most recent
+ * Generate click: it auto-expands and gets a highlight until the next
+ * generation replaces it or the page is left and revisited.
+ */
+export function PostGenerationList({
   posts,
+  justGeneratedId,
   deleteAction,
   actions,
 }: {
   posts: PostGenerationRow[];
+  justGeneratedId: string | null;
   deleteAction: (id: string) => Promise<void>;
   actions?: PostGenerationActions;
 }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  if (posts.length === 0) return null;
+  const [expandedId, setExpandedId] = useState<string | null>(justGeneratedId);
+  // Auto-expand each newly generated post as it arrives — React's documented
+  // pattern for adjusting state when a prop changes, not an effect, so this
+  // doesn't trigger an extra render pass. See
+  // https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes
+  const [trackedJustGeneratedId, setTrackedJustGeneratedId] = useState(justGeneratedId);
+  if (justGeneratedId !== trackedJustGeneratedId) {
+    setTrackedJustGeneratedId(justGeneratedId);
+    if (justGeneratedId) setExpandedId(justGeneratedId);
+  }
 
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium text-muted-foreground">Previous posts</p>
       {posts.map((post) => {
         const expanded = expandedId === post.id;
+        const justGenerated = justGeneratedId === post.id;
         return (
-          <Card key={post.id} className={cx("p-4", post.posted_at && "border-success/40 bg-success/5")}>
+          <Card
+            key={post.id}
+            className={cx(
+              "p-4",
+              justGenerated
+                ? "border-primary/50 bg-primary/5"
+                : post.posted_at && "border-success/40 bg-success/5",
+            )}
+          >
             <button
               type="button"
               onClick={() => setExpandedId(expanded ? null : post.id)}
@@ -51,6 +75,12 @@ export function HistoryList({
                   <Badge variant="accent" className="capitalize">
                     {post.theme}
                   </Badge>
+                  {justGenerated && (
+                    <Badge variant="accent" className="gap-1">
+                      <Sparkles className="h-3 w-3" strokeWidth={2} />
+                      New
+                    </Badge>
+                  )}
                   {post.posted_at && <Badge variant="good">Posted</Badge>}
                   <span className="text-xs text-muted-foreground">{formatRelativeDate(post.created_at)}</span>
                 </div>

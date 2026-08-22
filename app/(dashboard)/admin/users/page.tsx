@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import {
   Badge,
+  Input,
   PageHeading,
   SegmentedControl,
   SegmentedControlButton,
@@ -14,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
-import { setUserRole, setUserStatus } from "./actions";
+import { setUserDisplayName, setUserRole, setUserStatus } from "./actions";
 
 const statusVariant = {
   approved: "good",
@@ -52,8 +53,18 @@ export default async function AdminUsersPage() {
             return (
               <TableRow key={p.id}>
                 <TableCell>
-                  <div className="text-foreground">{p.display_name ?? p.email}</div>
-                  <div className="font-mono text-xs text-muted-foreground">{p.email}</div>
+                  <form action={setUserDisplayName.bind(null, p.id)} className="flex items-center gap-2">
+                    <Input
+                      name="displayName"
+                      defaultValue={p.display_name ?? ""}
+                      placeholder={p.email}
+                      className="h-8 w-40 text-sm"
+                    />
+                    <SubmitButton variant="secondary" size="sm" pendingText="Salvando…">
+                      Salvar
+                    </SubmitButton>
+                  </form>
+                  <div className="mt-1 font-mono text-xs text-muted-foreground">{p.email}</div>
                 </TableCell>
                 <TableCell>
                   <Badge variant={statusVariant[p.status]}>{p.status}</Badge>

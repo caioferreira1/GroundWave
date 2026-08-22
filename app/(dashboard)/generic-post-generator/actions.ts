@@ -8,9 +8,11 @@ import { generatePostGeneration } from "@/lib/ai/post-generator";
 export async function generatePost() {
   const { user } = await requireStaff();
 
-  await generatePostGeneration({ mode: "generic", createdBy: user.id });
+  const generation = await generatePostGeneration({ mode: "generic", createdBy: user.id });
 
   revalidatePath("/generic-post-generator");
+
+  return { id: generation.id };
 }
 
 export async function deletePostGeneration(id: string) {
