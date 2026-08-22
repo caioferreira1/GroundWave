@@ -104,7 +104,7 @@ export function TodaysTasksCard({
           <EmptyState
             icon={CheckCircle2}
             title="No active accounts yet"
-            description="Add this company's Reddit accounts in the Accounts tab to start tracking daily tasks."
+            description="Link this company to a Reddit account on the global Accounts page to start tracking daily tasks."
           />
         ) : (
           <>

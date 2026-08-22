@@ -1,5 +1,6 @@
 import { Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { getAllRedditAccountsForCompany } from "@/lib/activity/accounts";
 import { EmptyState, PageHeading } from "@/components/ui";
 import { GenerationPanel } from "@/components/post-generator/generation-panel";
 import { PostGenerationCard } from "@/components/post-generator/post-generation-card";
@@ -53,13 +54,9 @@ export default async function CompanyPostGeneratorPage({
   // Reddit accounts this company has registered — used to tag which account
   // posted an original post (see lib/activity/rotation.ts for what the
   // tagging feeds). All accounts for name lookup; only active ones offered.
-  const { data: redditAccounts } = await supabase
-    .from("reddit_accounts")
-    .select("id, account_name, is_active")
-    .eq("company_id", companyId)
-    .order("account_name", { ascending: true });
-  const accountNameById = new Map((redditAccounts ?? []).map((a) => [a.id, a.account_name]));
-  const activeAccounts = (redditAccounts ?? []).filter((a) => a.is_active);
+  const redditAccounts = await getAllRedditAccountsForCompany(supabase, companyId);
+  const accountNameById = new Map(redditAccounts.map((a) => [a.id, a.account_name]));
+  const activeAccounts = redditAccounts.filter((a) => a.is_active);
 
   const posts: PostGenerationRow[] = (generations ?? []).map((row) => ({
     id: row.id,

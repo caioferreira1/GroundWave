@@ -1,4 +1,5 @@
 import { Badge, Card, CardContent, CardHeader, CardTitle, CopyButton } from "@/components/ui";
+import { cx } from "@/lib/cx";
 import { PostedStatus } from "./posted-status";
 import type { PostGenerationActions, PostGenerationRow } from "./types";
 
@@ -10,7 +11,7 @@ export function PostGenerationCard({
   actions?: PostGenerationActions;
 }) {
   return (
-    <Card className="overflow-hidden">
+    <Card className={cx("overflow-hidden", post.posted_at && "border-success/40 bg-success/5")}>
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="neutral" className="font-mono">
@@ -19,6 +20,7 @@ export function PostGenerationCard({
           <Badge variant="accent" className="capitalize">
             {post.theme}
           </Badge>
+          {post.posted_at && <Badge variant="good">Posted</Badge>}
         </div>
         <CardTitle className="text-lg leading-snug">{post.title}</CardTitle>
       </CardHeader>

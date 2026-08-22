@@ -4,20 +4,62 @@ import type { DailyActivity, WeekActivity } from "./rotation";
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>;
 
+type PostGenerationActivityRow = { reddit_account_id: string; post_type: string | null; posted_at: string };
+
+/**
+ * mode='generic' post_generations rows tagged to one of `accountIds` —
+ * standalone /generic-post-generator posts that got attributed to a company
+ * at mark-posted time via the Reddit account chosen (see
+ * lib/activity/accounts.ts's getCompanyRedditAccountIds for why an account,
+ * not company_id, is the join key for generic-mode rows). Returns [] without
+ * querying when `accountIds` is empty, so callers can unconditionally spread
+ * the result alongside their company_id-scoped query.
+ */
+async function getGenericPostGenerationActivity(
+  supabase: SupabaseServerClient,
+  accountIds: string[],
+  options: { gte?: string; lt?: string; orderNewestFirst?: boolean } = {},
+): Promise<PostGenerationActivityRow[]> {
+  if (accountIds.length === 0) return [];
+
+  let query = supabase
+    .from("post_generations")
+    .select("reddit_account_id, post_type, posted_at")
+    .eq("mode", "generic")
+    .not("posted_at", "is", null)
+    .in("reddit_account_id", accountIds);
+
+  if (options.gte) query = query.gte("posted_at", options.gte);
+  if (options.lt) query = query.lt("posted_at", options.lt);
+  if (options.orderNewestFirst) query = query.order("posted_at", { ascending: false });
+
+  const { data } = await query;
+  return (data ?? []) as PostGenerationActivityRow[];
+}
+
 /**
  * Feeds lib/activity/rotation.ts: this ISO week's tagged comment/post counts
  * per account, plus each account's most recent generic/company-mention post
  * ever (unbounded by week — needed to tell whether a generic post is overdue
  * and who's least-recently done a company-mention post). No SQL aggregation,
  * same "pilot scale" approach as lib/analytics/queries.ts.
+ *
+ * `accountIds` (this company's Reddit accounts, from
+ * getCompanyRedditAccountIds) additionally pulls in mode='generic'
+ * post_generations rows posted with one of those accounts — posts made on
+ * the standalone /generic-post-generator page but tagged to this company's
+ * account at mark-posted time. Additive only: a row's mode is exclusively
+ * 'company' or 'generic', so this can never double up against the
+ * company_id-scoped query below.
  */
 export async function getWeekActivityForRotation(
   supabase: SupabaseServerClient,
   companyId: string,
+  accountIds: string[],
 ): Promise<WeekActivity> {
   const weekStart = weekWindowStartIso(1);
 
-  const [{ data: weekComments }, { data: weekPosts }, { data: allPosts }] = await Promise.all([
+  const [{ data: weekComments }, { data: weekPosts }, weekPostsGeneric, { data: allPosts }, allPostsGeneric] = await Promise.all([
     supabase
       .from("posts")
       .select("reddit_account_id, comment_type, comment_posted_at")
@@ -33,6 +75,7 @@ export async function getWeekActivityForRotation(
       .not("posted_at", "is", null)
       .not("reddit_account_id", "is", null)
       .gte("posted_at", weekStart),
+    getGenericPostGenerationActivity(supabase, accountIds, { gte: weekStart }),
     supabase
       .from("post_generations")
       .select("reddit_account_id, post_type, posted_at")
@@ -41,7 +84,15 @@ export async function getWeekActivityForRotation(
       .not("posted_at", "is", null)
       .not("reddit_account_id", "is", null)
       .order("posted_at", { ascending: false }),
+    getGenericPostGenerationActivity(supabase, accountIds, { orderNewestFirst: true }),
   ]);
+
+  const combinedWeekPosts = [...(weekPosts ?? []), ...weekPostsGeneric];
+  // Both sources are already newest-first; merge-by-recency so the combined
+  // list stays newest-first for the walks below.
+  const combinedAllPosts = [...(allPosts ?? []), ...allPostsGeneric].sort((a, b) =>
+    (a.posted_at ?? "") < (b.posted_at ?? "") ? 1 : (a.posted_at ?? "") > (b.posted_at ?? "") ? -1 : 0,
+  );
 
   const commentsByAccount = new Map<string, { generic: number; target: number }>();
   const commentsByAccountByDay = new Map<string, Map<string, { generic: number; target: number }>>();
@@ -63,7 +114,7 @@ export async function getWeekActivityForRotation(
 
   const postsByAccount = new Map<string, { generic: number; company_mention: number }>();
   const postsByAccountByDay = new Map<string, Map<string, { generic: number; company_mention: number }>>();
-  for (const row of weekPosts ?? []) {
+  for (const row of combinedWeekPosts) {
     if (!row.reddit_account_id || !row.posted_at) continue;
     const entry = postsByAccount.get(row.reddit_account_id) ?? { generic: 0, company_mention: 0 };
     if (row.post_type === "generic") entry.generic += 1;
@@ -79,11 +130,11 @@ export async function getWeekActivityForRotation(
     postsByAccountByDay.set(row.reddit_account_id, byDay);
   }
 
-  // allPosts is ordered newest-first, so the first row seen per
+  // combinedAllPosts is ordered newest-first, so the first row seen per
   // (account, type) pair is that account's most recent post of that type.
   const lastGenericPostAt = new Map<string, string | null>();
   const lastCompanyMentionPostAt = new Map<string, string | null>();
-  for (const row of allPosts ?? []) {
+  for (const row of combinedAllPosts) {
     if (!row.reddit_account_id) continue;
     if (row.post_type === "generic" && !lastGenericPostAt.has(row.reddit_account_id)) {
       lastGenericPostAt.set(row.reddit_account_id, row.posted_at);
@@ -99,7 +150,7 @@ export async function getWeekActivityForRotation(
   // all its generic posts ever, if it's never made a company-mention post).
   const genericPostsSinceLastCompanyMention = new Map<string, number>();
   const resolvedForMention = new Set<string>();
-  for (const row of allPosts ?? []) {
+  for (const row of combinedAllPosts) {
     if (!row.reddit_account_id || resolvedForMention.has(row.reddit_account_id)) continue;
     if (row.post_type === "company_mention") {
       resolvedForMention.add(row.reddit_account_id);
@@ -136,11 +187,12 @@ export async function getTodaysRealActivity(
   supabase: SupabaseServerClient,
   companyId: string,
   taskDate: string,
+  accountIds: string[],
 ): Promise<DailyActivity> {
   const startIso = `${taskDate}T00:00:00.000Z`;
   const endIso = new Date(new Date(startIso).getTime() + 24 * 60 * 60 * 1000).toISOString();
 
-  const [{ data: todaysComments }, { data: todaysPosts }] = await Promise.all([
+  const [{ data: todaysComments }, { data: todaysPosts }, todaysPostsGeneric] = await Promise.all([
     supabase
       .from("posts")
       .select("reddit_account_id, comment_type")
@@ -156,6 +208,7 @@ export async function getTodaysRealActivity(
       .not("reddit_account_id", "is", null)
       .gte("posted_at", startIso)
       .lt("posted_at", endIso),
+    getGenericPostGenerationActivity(supabase, accountIds, { gte: startIso, lt: endIso }),
   ]);
 
   const comments = new Map<string, { generic: number; target: number }>();
@@ -168,7 +221,7 @@ export async function getTodaysRealActivity(
   }
 
   const posts = new Map<string, { generic: number; company_mention: number }>();
-  for (const row of todaysPosts ?? []) {
+  for (const row of [...(todaysPosts ?? []), ...todaysPostsGeneric]) {
     if (!row.reddit_account_id) continue;
     const entry = posts.get(row.reddit_account_id) ?? { generic: 0, company_mention: 0 };
     if (row.post_type === "generic") entry.generic += 1;

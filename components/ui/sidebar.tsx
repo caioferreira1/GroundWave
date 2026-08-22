@@ -34,6 +34,7 @@ const primaryNav = [
 export function Sidebar({
   companies,
   isAdmin,
+  isStaff,
   roleLabel,
   roleVariant,
   userLabel,
@@ -41,6 +42,7 @@ export function Sidebar({
 }: {
   companies: Company[];
   isAdmin: boolean;
+  isStaff: boolean;
   roleLabel: string;
   roleVariant: "accent" | "neutral" | "warning";
   userLabel: string;
@@ -136,6 +138,9 @@ export function Sidebar({
           {primaryNav.map((item) => (
             <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} active={pathname === item.href} />
           ))}
+          {isStaff && (
+            <NavItem href="/accounts" icon={UsersIcon} label="Accounts" active={pathname.startsWith("/accounts")} />
+          )}
           {isAdmin && (
             <NavItem
               href="/admin/users"

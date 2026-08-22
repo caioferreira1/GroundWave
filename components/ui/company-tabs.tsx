@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Gauge, MessagesSquare, Settings, Sparkles, Users, type LucideIcon } from "lucide-react";
+import { Gauge, MessagesSquare, Settings, Sparkles, type LucideIcon } from "lucide-react";
 import { cx } from "@/lib/cx";
 import { buttonClass } from "./button";
 import { SegmentedControl, SegmentedControlLink } from "./segmented-control";
@@ -11,7 +11,6 @@ const tabs: { label: string; icon: LucideIcon; suffix: string }[] = [
   { label: "Overview", icon: Gauge, suffix: "" },
   { label: "Posts", icon: MessagesSquare, suffix: "/posts" },
   { label: "Post Generator", icon: Sparkles, suffix: "/post-generator" },
-  { label: "Accounts", icon: Users, suffix: "/accounts" },
 ];
 
 export function CompanyTabs({ companyId }: { companyId: string }) {

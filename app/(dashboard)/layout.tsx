@@ -29,6 +29,7 @@ export default async function DashboardLayout({
       <Sidebar
         companies={companies ?? []}
         isAdmin={isAdmin}
+        isStaff={isStaff}
         roleLabel={roleLabel}
         roleVariant={roleVariant}
         userLabel={abbreviateName(profile.display_name, profile.email)}

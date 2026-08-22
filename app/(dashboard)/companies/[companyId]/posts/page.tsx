@@ -2,6 +2,7 @@ import Link from "next/link";
 import { CheckCircle2, FileText, MessagesSquare, ThumbsUp } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getApifyAccountUsage } from "@/lib/reddit/apify";
+import { getAllRedditAccountsForCompany } from "@/lib/activity/accounts";
 import {
   Card,
   CardContent,
@@ -149,13 +150,9 @@ export default async function CompanyPostsPage({
   // posted a comment (see lib/activity/rotation.ts for what the tagging
   // feeds). All accounts (not just active) so old tags still resolve a name;
   // only active ones are offered as choices going forward.
-  const { data: redditAccounts } = await supabase
-    .from("reddit_accounts")
-    .select("id, account_name, is_active")
-    .eq("company_id", companyId)
-    .order("account_name", { ascending: true });
-  const accountNameById = new Map((redditAccounts ?? []).map((a) => [a.id, a.account_name]));
-  const activeAccounts = (redditAccounts ?? []).filter((a) => a.is_active);
+  const redditAccounts = await getAllRedditAccountsForCompany(supabase, companyId);
+  const accountNameById = new Map(redditAccounts.map((a) => [a.id, a.account_name]));
+  const activeAccounts = redditAccounts.filter((a) => a.is_active);
 
   const boundAddManualComment = addManualComment.bind(null, companyId);
   const runNowAction = runIngestionNow.bind(null, companyId);

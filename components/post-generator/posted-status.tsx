@@ -1,12 +1,21 @@
 import { Badge, Input, Select, SubmitButton } from "@/components/ui";
 import type { PostGenerationActions, PostGenerationRow } from "./types";
 
+function accountLabel(account: { account_name: string; company_names?: string[] }): string {
+  if (!account.company_names || account.company_names.length === 0) return `u/${account.account_name}`;
+  return `u/${account.account_name} (${account.company_names.join(", ")})`;
+}
+
 /**
  * Shared by the featured card and each history item — mark-as-posted +
  * manually-reported views, mirroring the equivalent block in
  * app/(dashboard)/companies/[companyId]/posts/page.tsx for comment replies.
- * Only rendered when `actions` is passed (company mode); generic-mode
- * generations have no company to attribute metrics to.
+ * Only rendered when `actions` is passed. On the company post-generator,
+ * `actions.accounts` is scoped to the current company; on the generic
+ * post-generator, it spans every company's accounts, each labeled with the
+ * company/companies it's linked to (an account can belong to more than one)
+ * since the account chosen is what attributes a generic post to a company's
+ * weekly goal and dashboard.
  */
 export function PostedStatus({
   post,
@@ -16,6 +25,8 @@ export function PostedStatus({
   actions: PostGenerationActions;
 }) {
   if (!actions.isStaff) return null;
+
+  const crossCompanyPicker = actions.accounts.some((a) => a.company_names);
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
@@ -71,11 +82,15 @@ export function PostedStatus({
                 <option value="">No account tracked</option>
                 {actions.accounts.map((a) => (
                   <option key={a.id} value={a.id}>
-                    u/{a.account_name}
+                    {accountLabel(a)}
                   </option>
                 ))}
               </Select>
-              <Select name="post_type" defaultValue="company_mention" className="h-8 w-auto text-xs">
+              <Select
+                name="post_type"
+                defaultValue={crossCompanyPicker ? "generic" : "company_mention"}
+                className="h-8 w-auto text-xs"
+              >
                 <option value="company_mention">Company mention</option>
                 <option value="generic">Generic</option>
               </Select>

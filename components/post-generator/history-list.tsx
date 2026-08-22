@@ -37,7 +37,7 @@ export function HistoryList({
       {posts.map((post) => {
         const expanded = expandedId === post.id;
         return (
-          <Card key={post.id} className="p-4">
+          <Card key={post.id} className={cx("p-4", post.posted_at && "border-success/40 bg-success/5")}>
             <button
               type="button"
               onClick={() => setExpandedId(expanded ? null : post.id)}
@@ -51,6 +51,7 @@ export function HistoryList({
                   <Badge variant="accent" className="capitalize">
                     {post.theme}
                   </Badge>
+                  {post.posted_at && <Badge variant="good">Posted</Badge>}
                   <span className="text-xs text-muted-foreground">{formatRelativeDate(post.created_at)}</span>
                 </div>
                 <p className="text-sm font-medium text-foreground">{post.title}</p>

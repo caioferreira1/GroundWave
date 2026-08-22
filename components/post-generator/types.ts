@@ -21,9 +21,11 @@ export type StaffMember = {
 export type RedditAccountOption = {
   id: string;
   account_name: string;
+  /** Set only on the generic-mode picker, appended to the option label (an account can be linked to more than one company) — the account choice is what attributes a generic post to a company. Absent on the company post-generator route, where every option already belongs to the current company. */
+  company_names?: string[];
 };
 
-/** Only present on the company post-generator route — generic mode has no per-company metrics to feed. */
+/** Present on both post-generator routes now — company mode scopes accounts to the current company, generic mode offers every company's accounts grouped by company. */
 export type PostGenerationActions = {
   isStaff: boolean;
   staffMembers: StaffMember[];

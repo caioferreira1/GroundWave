@@ -16,7 +16,7 @@ import {
   Switch,
   Textarea,
 } from "@/components/ui";
-import { regenerateWebhookToken, updateCompanySettings } from "./actions";
+import { regenerateWebhookToken, updateActivityGoals, updateCompanySettings } from "./actions";
 
 export default async function CompanySettingsPage({
   params,
@@ -28,7 +28,7 @@ export default async function CompanySettingsPage({
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, search_keywords, suggested_subreddits, posts_min_upvotes, posts_fetch_frequency_hours, posts_fetch_hour_utc, posts_sort, posts_time_window, posts_max_per_run, posts_fetch_enabled, profile, guardrails_md, inbound_webhook_token",
+      "id, search_keywords, suggested_subreddits, posts_min_upvotes, posts_fetch_frequency_hours, posts_fetch_hour_utc, posts_sort, posts_time_window, posts_max_per_run, posts_fetch_enabled, profile, guardrails_md, inbound_webhook_token, activity_generic_comments_per_week, activity_target_comments_per_week, activity_generic_post_interval_days, activity_company_post_per_week, activity_generic_posts_before_target",
     )
     .eq("id", companyId)
     .maybeSingle();
@@ -42,6 +42,7 @@ export default async function CompanySettingsPage({
 
   const updateAction = updateCompanySettings.bind(null, companyId);
   const regenerateAction = regenerateWebhookToken.bind(null, companyId);
+  const goalsAction = updateActivityGoals.bind(null, companyId);
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -192,6 +193,85 @@ export default async function CompanySettingsPage({
         </Card>
 
         <SubmitButton pendingText="Saving…">Save settings</SubmitButton>
+      </form>
+
+      <form action={goalsAction}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Weekly activity goals</CardTitle>
+            <CardDescription>
+              Most fields below are a company-wide weekly total, split evenly across active accounts (remainder goes
+              to the higher-karma accounts) — except &quot;Generic posts before 1 target post&quot;, which applies to
+              each account individually. Drives the Today&apos;s tasks panel on Overview.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Generic comments / week" htmlFor="activity_generic_comments_per_week">
+                <Input
+                  id="activity_generic_comments_per_week"
+                  name="activity_generic_comments_per_week"
+                  type="number"
+                  min={0}
+                  defaultValue={company.activity_generic_comments_per_week}
+                />
+              </Field>
+              <Field
+                label="Target comments / week"
+                htmlFor="activity_target_comments_per_week"
+                hint="Comments mentioning or contributing on this company's target posts."
+              >
+                <Input
+                  id="activity_target_comments_per_week"
+                  name="activity_target_comments_per_week"
+                  type="number"
+                  min={0}
+                  defaultValue={company.activity_target_comments_per_week}
+                />
+              </Field>
+              <Field
+                label="Generic post every (days)"
+                htmlFor="activity_generic_post_interval_days"
+                hint="Each account should make a generic post at least this often."
+              >
+                <Input
+                  id="activity_generic_post_interval_days"
+                  name="activity_generic_post_interval_days"
+                  type="number"
+                  min={1}
+                  defaultValue={company.activity_generic_post_interval_days}
+                />
+              </Field>
+              <Field
+                label="Company-mention posts / week"
+                htmlFor="activity_company_post_per_week"
+                hint="Rotates which account does it, picking whoever's gone longest without one."
+              >
+                <Input
+                  id="activity_company_post_per_week"
+                  name="activity_company_post_per_week"
+                  type="number"
+                  min={0}
+                  defaultValue={company.activity_company_post_per_week}
+                />
+              </Field>
+              <Field
+                label="Generic posts before 1 target post (per account)"
+                htmlFor="activity_generic_posts_before_target"
+                hint="Per account, not split like the fields above: each individual account needs this many generic posts since its own last target post before it's picked for the next one. 0 = no gate. As a last resort, an account can be picked at 70% of this if no account has fully cleared it."
+              >
+                <Input
+                  id="activity_generic_posts_before_target"
+                  name="activity_generic_posts_before_target"
+                  type="number"
+                  min={0}
+                  defaultValue={company.activity_generic_posts_before_target}
+                />
+              </Field>
+            </div>
+            <SubmitButton pendingText="Saving…">Save goals</SubmitButton>
+          </CardContent>
+        </Card>
       </form>
 
       <Card>

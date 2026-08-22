@@ -89,7 +89,7 @@ export function RotationStatusCard({
           <EmptyState
             icon={Repeat}
             title="No active accounts yet"
-            description="Add this company's Reddit accounts in the Accounts tab to start tracking the rotation."
+            description="Link this company to a Reddit account on the global Accounts page to start tracking the rotation."
           />
         ) : (
           <>

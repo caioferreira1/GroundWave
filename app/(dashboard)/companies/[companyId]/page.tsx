@@ -10,7 +10,7 @@ import { TrendAreaChart } from "@/components/analytics/trend-area-chart";
 import { TrendDualAreaChart } from "@/components/analytics/trend-dual-area-chart";
 import { TodaysTasksCard } from "@/components/activity/todays-tasks";
 import { RotationStatusCard, type RotationRow } from "@/components/activity/rotation-status-card";
-import { getActiveRedditAccounts } from "@/lib/activity/accounts";
+import { getActiveRedditAccounts, getCompanyRedditAccountIds } from "@/lib/activity/accounts";
 import {
   getManualCompletionActivity,
   getTodaysRealActivity,
@@ -57,6 +57,13 @@ export default async function CompanyOverviewPage({
     : { data: [] };
   const isStaff = (roles ?? []).some((r) => r.role === "admin" || r.role === "coworker");
 
+  // reddit_accounts has no client RLS policy (staff-only), so this stays []
+  // for a client viewer — their totals/trends below then only reflect
+  // company_id-tagged (mode='company') posts, same as before this feature;
+  // staff viewers additionally see generic-mode posts tagged to one of these
+  // accounts (see getGenericPostGenerations in lib/analytics/queries.ts).
+  const accountIds = isStaff ? await getCompanyRedditAccountIds(supabase, companyId) : [];
+
   const [
     { data: company },
     postsTrend,
@@ -74,13 +81,13 @@ export default async function CompanyOverviewPage({
       )
       .eq("id", companyId)
       .maybeSingle(),
-    getPostsPostedTrend(supabase, companyId),
+    getPostsPostedTrend(supabase, companyId, accountIds),
     getCommentsTrend(supabase, companyId),
-    getViewsTrend(supabase, companyId),
-    getOverviewTotals(supabase, companyId),
-    getPostsBySubreddit(supabase, companyId),
+    getViewsTrend(supabase, companyId, accountIds),
+    getOverviewTotals(supabase, companyId, accountIds),
+    getPostsBySubreddit(supabase, companyId, accountIds),
     getCommentsBySubreddit(supabase, companyId),
-    getCollaboratorActivity(supabase, companyId),
+    getCollaboratorActivity(supabase, companyId, accountIds),
   ]);
 
   if (!company) notFound();
@@ -123,10 +130,10 @@ export default async function CompanyOverviewPage({
     const [accounts, realActivity, manualActivity, todaysActivity, activityByAccount, { data: profiles }, completions] =
       await Promise.all([
         getActiveRedditAccounts(supabase, companyId),
-        getWeekActivityForRotation(supabase, companyId),
+        getWeekActivityForRotation(supabase, companyId, accountIds),
         getManualCompletionActivity(supabase, companyId),
-        getTodaysRealActivity(supabase, companyId, taskDate),
-        getActivityByRedditAccount(supabase, companyId),
+        getTodaysRealActivity(supabase, companyId, taskDate, accountIds),
+        getActivityByRedditAccount(supabase, companyId, accountIds),
         supabase.from("profiles").select("id, display_name, email"),
         getTodaysTaskCompletions(supabase, companyId, taskDate),
       ]);
@@ -162,13 +169,13 @@ export default async function CompanyOverviewPage({
         <StatCard
           className="lg:col-span-4"
           icon={Send}
-          label="Posts posted"
+          label="Target posts"
           value={<span className="text-2xl font-semibold text-foreground">{totals.postsPosted}</span>}
         />
         <StatCard
           className="lg:col-span-4"
           icon={MessagesSquare}
-          label="Comments posted"
+          label="Target comments"
           value={<span className="text-2xl font-semibold text-foreground">{totals.commentsPosted}</span>}
         />
         <StatCard

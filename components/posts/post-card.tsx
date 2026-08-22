@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { Badge, Card, CardContent, Input, Select, SubmitButton, Textarea } from "@/components/ui";
+import { cx } from "@/lib/cx";
 
 export type PostCardData = {
   id: string;
@@ -104,6 +105,7 @@ export function PostCard({
           {post.human_verdict && <Badge variant="accent">Human: {post.human_verdict}</Badge>}
         </>
       )}
+      {post.comment_posted_at && <Badge variant="good">Posted</Badge>}
     </div>
   );
 
@@ -151,7 +153,7 @@ export function PostCard({
             open();
           }
         }}
-        className="cursor-pointer"
+        className={cx("cursor-pointer", post.comment_posted_at && "border-success/40 bg-success/5")}
       >
         <CardContent className="space-y-3">
           {badges}

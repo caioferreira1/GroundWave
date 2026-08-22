@@ -46,21 +46,53 @@ function countBySubreddit(values: (string | null)[]): SubredditCount[] {
  * view/RPC if row counts grow well past pilot scale.
  */
 
+/**
+ * mode='generic' post_generations rows tagged to one of `accountIds` (this
+ * company's Reddit accounts — see lib/activity/accounts.ts's
+ * getCompanyRedditAccountIds) — standalone /generic-post-generator posts
+ * attributed to a company via the account chosen at mark-posted time.
+ * Additive alongside each function's existing company_id+mode='company'
+ * query below: a row's mode is exclusively one or the other, so concatenating
+ * the two result sets can never double-count a row. Returns [] without
+ * querying when `accountIds` is empty.
+ */
+async function getGenericPostGenerations<Select extends string>(
+  supabase: SupabaseServerClient,
+  accountIds: string[],
+  select: Select,
+  options: { gte?: string; requirePostedAt?: boolean } = {},
+) {
+  if (accountIds.length === 0) return [];
+
+  let query = supabase.from("post_generations").select(select).eq("mode", "generic").in("reddit_account_id", accountIds);
+  if (options.requirePostedAt !== false) query = query.not("posted_at", "is", null);
+  if (options.gte) query = query.gte("posted_at", options.gte);
+
+  const { data } = await query;
+  return data ?? [];
+}
+
 export async function getPostsPostedTrend(
   supabase: SupabaseServerClient,
   companyId: string,
+  accountIds: string[],
   pastWeeks: number = DEFAULT_PAST_WEEKS,
   futureWeeks: number = DEFAULT_FUTURE_WEEKS,
 ): Promise<DateCount[]> {
-  const { data } = await supabase
-    .from("post_generations")
-    .select("posted_at")
-    .eq("company_id", companyId)
-    .eq("mode", "company")
-    .not("posted_at", "is", null)
-    .gte("posted_at", weekWindowStartIso(pastWeeks));
+  const windowStart = weekWindowStartIso(pastWeeks);
 
-  return countByWeek((data ?? []).map((row) => row.posted_at), pastWeeks, futureWeeks);
+  const [{ data }, genericRows] = await Promise.all([
+    supabase
+      .from("post_generations")
+      .select("posted_at")
+      .eq("company_id", companyId)
+      .eq("mode", "company")
+      .not("posted_at", "is", null)
+      .gte("posted_at", windowStart),
+    getGenericPostGenerations(supabase, accountIds, "posted_at", { gte: windowStart }),
+  ]);
+
+  return countByWeek([...(data ?? []), ...genericRows].map((row) => row.posted_at), pastWeeks, futureWeeks);
 }
 
 export async function getCommentsTrend(
@@ -96,12 +128,13 @@ export async function getCommentsTrend(
 export async function getViewsTrend(
   supabase: SupabaseServerClient,
   companyId: string,
+  accountIds: string[],
   pastWeeks: number = DEFAULT_PAST_WEEKS,
   futureWeeks: number = DEFAULT_FUTURE_WEEKS,
 ): Promise<ViewsTrendPoint[]> {
   const windowStart = weekWindowStartIso(pastWeeks);
 
-  const [{ data: postRows }, { data: commentRows }] = await Promise.all([
+  const [{ data: postRows }, genericPostRows, { data: commentRows }] = await Promise.all([
     supabase
       .from("post_generations")
       .select("posted_at, views_count")
@@ -109,6 +142,7 @@ export async function getViewsTrend(
       .eq("mode", "company")
       .not("posted_at", "is", null)
       .gte("posted_at", windowStart),
+    getGenericPostGenerations(supabase, accountIds, "posted_at, views_count", { gte: windowStart }),
     supabase
       .from("posts")
       .select("comment_posted_at, comment_views_count")
@@ -118,7 +152,7 @@ export async function getViewsTrend(
   ]);
 
   const postViews = sumByWeek(
-    (postRows ?? []).map((row) => ({ date: row.posted_at, value: row.views_count })),
+    [...(postRows ?? []), ...genericPostRows].map((row) => ({ date: row.posted_at, value: row.views_count })),
     pastWeeks,
     futureWeeks,
   );
@@ -136,29 +170,40 @@ export async function getViewsTrend(
   }));
 }
 
-/** All-time totals — a different, wider window than the 30-day trend charts above. */
+/**
+ * All-time totals — a different, wider window than the 30-day trend charts
+ * above. `postsPosted`/`commentsPosted` are deliberately target-only
+ * (post_type='company_mention' / comment_type='target') — the headline
+ * numbers on the company Overview page, unlike every chart below them, don't
+ * mix in generic (non-company) activity. `reportedViews` is intentionally
+ * left unfiltered (still sums generic + target), per product decision.
+ */
 export async function getOverviewTotals(
   supabase: SupabaseServerClient,
   companyId: string,
+  accountIds: string[],
 ): Promise<OverviewTotals> {
-  const [postsPostedResult, commentsPostedResult, postViewsRows, commentViewsRows] = await Promise.all([
+  const [postsPostedResult, commentsPostedResult, postViewsRows, genericPostViewsRows, commentViewsRows] = await Promise.all([
     supabase
       .from("post_generations")
       .select("id", { count: "exact", head: true })
       .eq("company_id", companyId)
       .eq("mode", "company")
+      .eq("post_type", "company_mention")
       .not("posted_at", "is", null),
     supabase
       .from("posts")
       .select("id", { count: "exact", head: true })
       .eq("company_id", companyId)
+      .eq("comment_type", "target")
       .not("comment_posted_at", "is", null),
     supabase.from("post_generations").select("views_count").eq("company_id", companyId).eq("mode", "company"),
+    getGenericPostGenerations(supabase, accountIds, "views_count", { requirePostedAt: false }),
     supabase.from("posts").select("comment_views_count").eq("company_id", companyId),
   ]);
 
   const reportedViews =
-    (postViewsRows.data ?? []).reduce((sum, row) => sum + (row.views_count ?? 0), 0) +
+    [...(postViewsRows.data ?? []), ...genericPostViewsRows].reduce((sum, row) => sum + (row.views_count ?? 0), 0) +
     (commentViewsRows.data ?? []).reduce((sum, row) => sum + (row.comment_views_count ?? 0), 0);
 
   return {
@@ -186,23 +231,28 @@ export async function getCommentsBySubreddit(
 export async function getPostsBySubreddit(
   supabase: SupabaseServerClient,
   companyId: string,
+  accountIds: string[],
 ): Promise<SubredditCount[]> {
-  const { data } = await supabase
-    .from("post_generations")
-    .select("subreddit")
-    .eq("company_id", companyId)
-    .eq("mode", "company")
-    .not("posted_at", "is", null);
+  const [{ data }, genericRows] = await Promise.all([
+    supabase
+      .from("post_generations")
+      .select("subreddit")
+      .eq("company_id", companyId)
+      .eq("mode", "company")
+      .not("posted_at", "is", null),
+    getGenericPostGenerations(supabase, accountIds, "subreddit"),
+  ]);
 
-  return countBySubreddit((data ?? []).map((row) => row.subreddit));
+  return countBySubreddit([...(data ?? []), ...genericRows].map((row) => row.subreddit));
 }
 
 /** All-time posts posted + comments posted per staff member who posted them. */
 export async function getCollaboratorActivity(
   supabase: SupabaseServerClient,
   companyId: string,
+  accountIds: string[],
 ): Promise<CollaboratorActivity[]> {
-  const [{ data: commentRows }, { data: postRows }, { data: profiles }] = await Promise.all([
+  const [{ data: commentRows }, { data: postRows }, genericPostRows, { data: profiles }] = await Promise.all([
     supabase
       .from("posts")
       .select("comment_posted_by")
@@ -214,6 +264,7 @@ export async function getCollaboratorActivity(
       .eq("company_id", companyId)
       .eq("mode", "company")
       .not("posted_at", "is", null),
+    getGenericPostGenerations(supabase, accountIds, "posted_by"),
     supabase.from("profiles").select("id, display_name, email"),
   ]);
 
@@ -226,7 +277,7 @@ export async function getCollaboratorActivity(
     entry.comments += 1;
     counts.set(row.comment_posted_by, entry);
   }
-  for (const row of postRows ?? []) {
+  for (const row of [...(postRows ?? []), ...genericPostRows]) {
     if (!row.posted_by) continue;
     const entry = counts.get(row.posted_by) ?? { posts: 0, comments: 0 };
     entry.posts += 1;
@@ -247,8 +298,9 @@ export async function getCollaboratorActivity(
 export async function getActivityByRedditAccount(
   supabase: SupabaseServerClient,
   companyId: string,
+  accountIds: string[],
 ): Promise<CollaboratorActivity[]> {
-  const [{ data: commentRows }, { data: postRows }, { data: accounts }] = await Promise.all([
+  const [{ data: commentRows }, { data: postRows }, genericPostRows, { data: accounts }] = await Promise.all([
     supabase
       .from("posts")
       .select("reddit_account_id")
@@ -262,7 +314,10 @@ export async function getActivityByRedditAccount(
       .eq("mode", "company")
       .not("posted_at", "is", null)
       .not("reddit_account_id", "is", null),
-    supabase.from("reddit_accounts").select("id, account_name").eq("company_id", companyId),
+    getGenericPostGenerations(supabase, accountIds, "reddit_account_id"),
+    accountIds.length > 0
+      ? supabase.from("reddit_accounts").select("id, account_name").in("id", accountIds)
+      : Promise.resolve({ data: [] as { id: string; account_name: string }[] }),
   ]);
 
   const nameById = new Map((accounts ?? []).map((a) => [a.id, a.account_name]));
@@ -274,7 +329,7 @@ export async function getActivityByRedditAccount(
     entry.comments += 1;
     counts.set(row.reddit_account_id, entry);
   }
-  for (const row of postRows ?? []) {
+  for (const row of [...(postRows ?? []), ...genericPostRows]) {
     if (!row.reddit_account_id) continue;
     const entry = counts.get(row.reddit_account_id) ?? { posts: 0, comments: 0 };
     entry.posts += 1;

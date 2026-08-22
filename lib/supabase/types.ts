@@ -96,7 +96,6 @@ export type Database = {
       reddit_accounts: {
         Row: {
           id: string;
-          company_id: string;
           account_name: string;
           karma: number;
           owner_user_id: string;
@@ -105,11 +104,23 @@ export type Database = {
           updated_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["reddit_accounts"]["Row"]> & {
-          company_id: string;
           account_name: string;
           owner_user_id: string;
         };
         Update: Partial<Database["public"]["Tables"]["reddit_accounts"]["Row"]>;
+        Relationships: [];
+      };
+      reddit_account_companies: {
+        Row: {
+          reddit_account_id: string;
+          company_id: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["reddit_account_companies"]["Row"]> & {
+          reddit_account_id: string;
+          company_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["reddit_account_companies"]["Row"]>;
         Relationships: [];
       };
       apify_runs: {
