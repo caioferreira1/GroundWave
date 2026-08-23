@@ -16,7 +16,14 @@ import {
   Switch,
   Textarea,
 } from "@/components/ui";
-import { regenerateWebhookToken, updateActivityGoals, updateCompanySettings } from "./actions";
+import {
+  generateKeywordsWithAi,
+  generateProfileWithAi,
+  generateSubredditsWithAi,
+  regenerateWebhookToken,
+  updateActivityGoals,
+  updateCompanySettings,
+} from "./actions";
 
 export default async function CompanySettingsPage({
   params,
@@ -28,7 +35,7 @@ export default async function CompanySettingsPage({
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, search_keywords, suggested_subreddits, posts_min_upvotes, posts_fetch_frequency_hours, posts_fetch_hour_utc, posts_sort, posts_time_window, posts_max_per_run, posts_fetch_enabled, profile, guardrails_md, inbound_webhook_token, activity_generic_comments_per_week, activity_target_comments_per_week, activity_generic_post_interval_days, activity_company_post_per_week, activity_generic_posts_before_target",
+      "id, website_url, search_keywords, suggested_subreddits, posts_min_upvotes, posts_fetch_frequency_hours, posts_fetch_hour_utc, posts_sort, posts_time_window, posts_max_per_run, posts_fetch_enabled, profile, guardrails_md, inbound_webhook_token, activity_generic_comments_per_week, activity_target_comments_per_week, activity_generic_post_interval_days, activity_company_post_per_week, activity_generic_posts_before_target",
     )
     .eq("id", companyId)
     .maybeSingle();
@@ -43,6 +50,9 @@ export default async function CompanySettingsPage({
   const updateAction = updateCompanySettings.bind(null, companyId);
   const regenerateAction = regenerateWebhookToken.bind(null, companyId);
   const goalsAction = updateActivityGoals.bind(null, companyId);
+  const generateProfileAction = generateProfileWithAi.bind(null, companyId);
+  const generateSubredditsAction = generateSubredditsWithAi.bind(null, companyId);
+  const generateKeywordsAction = generateKeywordsWithAi.bind(null, companyId);
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -61,6 +71,20 @@ export default async function CompanySettingsPage({
                 rows={5}
                 defaultValue={(company.search_keywords ?? []).join("\n")}
               />
+              <div className="mt-1.5 flex items-center gap-2">
+                <SubmitButton
+                  formAction={generateKeywordsAction}
+                  formNoValidate
+                  variant="secondary"
+                  size="sm"
+                  pendingText="Generating…"
+                >
+                  Generate with AI
+                </SubmitButton>
+                {!company.profile && (
+                  <p className="text-xs text-muted-foreground">Uses the company profile below — fill it in first.</p>
+                )}
+              </div>
             </Field>
 
             <Field
@@ -74,6 +98,20 @@ export default async function CompanySettingsPage({
                 rows={4}
                 defaultValue={(company.suggested_subreddits ?? []).join("\n")}
               />
+              <div className="mt-1.5 flex items-center gap-2">
+                <SubmitButton
+                  formAction={generateSubredditsAction}
+                  formNoValidate
+                  variant="secondary"
+                  size="sm"
+                  pendingText="Generating…"
+                >
+                  Generate with AI
+                </SubmitButton>
+                {!company.profile && (
+                  <p className="text-xs text-muted-foreground">Uses the company profile below — fill it in first.</p>
+                )}
+              </div>
             </Field>
 
             <div className="grid grid-cols-2 gap-4">
@@ -168,6 +206,20 @@ export default async function CompanySettingsPage({
           </CardHeader>
           <CardContent>
             <Field
+              label="Website URL"
+              htmlFor="website_url"
+              hint="Used to auto-generate the company profile below."
+            >
+              <Input
+                id="website_url"
+                name="website_url"
+                type="url"
+                placeholder="https://example.com"
+                defaultValue={company.website_url ?? ""}
+              />
+            </Field>
+
+            <Field
               label="Company profile"
               htmlFor="profile"
               hint="This is what the relevance classifier uses as ground truth — leaving it empty means every post gets marked not relevant."
@@ -179,6 +231,20 @@ export default async function CompanySettingsPage({
                 placeholder="Core topics, adjacent topics to ignore, ideal customer profile..."
                 defaultValue={company.profile ?? ""}
               />
+              <div className="mt-1.5 flex items-center gap-2">
+                <SubmitButton
+                  formAction={generateProfileAction}
+                  formNoValidate
+                  variant="secondary"
+                  size="sm"
+                  pendingText="Generating…"
+                >
+                  Generate with AI
+                </SubmitButton>
+                {!company.website_url && (
+                  <p className="text-xs text-muted-foreground">Uses the website URL above — fill it in first.</p>
+                )}
+              </div>
             </Field>
             <Field label="Guardrails" htmlFor="guardrails_md">
               <Textarea

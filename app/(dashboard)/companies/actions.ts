@@ -22,5 +22,5 @@ export async function createCompany(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/companies");
-  redirect(`/companies/${data.id}`);
+  redirect(`/companies/${data.id}/settings`);
 }

@@ -15,7 +15,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui";
-import { setUserDisplayName, setUserRole, setUserStatus } from "./actions";
+import { NotifyToggle } from "@/components/admin/notify-toggle";
+import { setUserDisplayName, setUserNotifyRelevantPosts, setUserRole, setUserStatus } from "./actions";
 
 const statusVariant = {
   approved: "good",
@@ -29,7 +30,7 @@ export default async function AdminUsersPage() {
   const supabase = await createClient();
   const { data: profiles } = await supabase
     .from("profiles")
-    .select("id, email, display_name, status")
+    .select("id, email, display_name, status, notify_relevant_posts")
     .order("created_at", { ascending: true });
   const { data: roles } = await supabase.from("user_roles").select("user_id, role");
 
@@ -44,6 +45,7 @@ export default async function AdminUsersPage() {
             <TableHead>User</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Role</TableHead>
+            <TableHead>Email alerts</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -71,6 +73,16 @@ export default async function AdminUsersPage() {
                 </TableCell>
                 <TableCell>
                   {role ? <Badge variant="accent">{role}</Badge> : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell>
+                  {role === "admin" || role === "coworker" ? (
+                    <NotifyToggle
+                      defaultChecked={p.notify_relevant_posts}
+                      action={setUserNotifyRelevantPosts.bind(null, p.id)}
+                    />
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Staff only</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-wrap items-center gap-2">

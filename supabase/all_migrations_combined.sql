@@ -756,3 +756,33 @@ select id, company_id from public.reddit_accounts;
 
 drop index if exists public.reddit_accounts_company_id_idx;
 alter table public.reddit_accounts drop column company_id;
+
+-- 0023_notify_relevant_posts.sql
+-- Per-user opt-in for the "new relevant posts" email alert (set by an admin
+-- on /admin/users, not self-service) — see lib/notifications/relevant-posts.ts.
+-- Defaults to false so nobody starts getting emails they didn't ask for.
+
+alter table public.profiles
+  add column notify_relevant_posts boolean not null default false;
+
+-- 0024_notify_min_relevance_score.sql
+-- Per-user minimum relevance score to trigger the "new relevant posts" email
+-- alert (lib/notifications/relevant-posts.ts) — a stricter bar than the
+-- classifier's own is_relevant cutoff (score >= 50, see
+-- lib/ai/classifier.ts's RELEVANCE_THRESHOLD), so a staff member can ask to
+-- only be emailed about the strongest matches. Default 70 mirrors the
+-- classifier prompt's own "70-90: clearly on-topic" band. Admin-set on
+-- /admin/users, same place as notify_relevant_posts (0023).
+
+alter table public.profiles
+  add column notify_min_relevance_score smallint not null default 70
+    constraint profiles_notify_min_relevance_score_range check (notify_min_relevance_score between 0 and 100);
+
+-- 0025_drop_notify_min_relevance_score.sql
+-- Reverts 0024: the per-user configurable alert threshold was replaced with
+-- a single fixed bar (MIN_RELEVANCE_SCORE_FOR_EMAIL = 85 in
+-- lib/notifications/relevant-posts.ts) before it ever shipped to users, so
+-- there's no data worth preserving here.
+
+alter table public.profiles
+  drop column notify_min_relevance_score;

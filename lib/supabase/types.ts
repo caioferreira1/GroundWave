@@ -18,6 +18,7 @@ export type Database = {
           job_title: string | null;
           avatar_path: string | null;
           status: "pending" | "approved" | "denied";
+          notify_relevant_posts: boolean;
           created_at: string;
           updated_at: string;
         };

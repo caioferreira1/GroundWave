@@ -24,6 +24,15 @@ export async function setUserDisplayName(userId: string, formData: FormData) {
   revalidatePath("/admin/users");
 }
 
+export async function setUserNotifyRelevantPosts(userId: string, formData: FormData) {
+  await requireAdmin();
+  const enabled = formData.get("enabled") === "on";
+  const supabase = await createClient();
+  const { error } = await supabase.from("profiles").update({ notify_relevant_posts: enabled }).eq("id", userId);
+  if (error) throw new Error(error.message);
+  revalidatePath("/admin/users");
+}
+
 export async function setUserRole(userId: string, role: "admin" | "coworker" | "client") {
   await requireAdmin();
   const supabase = await createClient();

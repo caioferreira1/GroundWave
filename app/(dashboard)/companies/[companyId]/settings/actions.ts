@@ -4,6 +4,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import {
+  generateCompanyProfile,
+  generateCompanySuggestedKeywords,
+  generateCompanySuggestedSubreddits,
+} from "@/lib/ai/company-onboarding";
 
 function linesToList(raw: string): string[] {
   return raw
@@ -39,6 +44,7 @@ export async function updateCompanySettings(companyId: string, formData: FormDat
   const postsFetchEnabled = formData.get("posts_fetch_enabled") === "on";
   const profile = String(formData.get("profile") ?? "").trim() || null;
   const guardrailsMd = String(formData.get("guardrails_md") ?? "").trim() || null;
+  const websiteUrl = String(formData.get("website_url") ?? "").trim() || null;
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -55,6 +61,7 @@ export async function updateCompanySettings(companyId: string, formData: FormDat
       posts_fetch_enabled: postsFetchEnabled,
       profile,
       guardrails_md: guardrailsMd,
+      website_url: websiteUrl,
     })
     .eq("id", companyId);
 
@@ -76,6 +83,30 @@ export async function regenerateWebhookToken(companyId: string) {
 
   if (error) throw new Error(error.message);
 
+  revalidatePath(`/companies/${companyId}/settings`);
+  redirect(`/companies/${companyId}/settings`);
+}
+
+export async function generateProfileWithAi(companyId: string, formData: FormData) {
+  await requireStaff();
+  const websiteUrl = String(formData.get("website_url") ?? "").trim();
+  await generateCompanyProfile(companyId, websiteUrl);
+  revalidatePath(`/companies/${companyId}/settings`);
+  redirect(`/companies/${companyId}/settings`);
+}
+
+export async function generateSubredditsWithAi(companyId: string, formData: FormData) {
+  await requireStaff();
+  const profile = String(formData.get("profile") ?? "").trim();
+  await generateCompanySuggestedSubreddits(companyId, profile);
+  revalidatePath(`/companies/${companyId}/settings`);
+  redirect(`/companies/${companyId}/settings`);
+}
+
+export async function generateKeywordsWithAi(companyId: string, formData: FormData) {
+  await requireStaff();
+  const profile = String(formData.get("profile") ?? "").trim();
+  await generateCompanySuggestedKeywords(companyId, profile);
   revalidatePath(`/companies/${companyId}/settings`);
   redirect(`/companies/${companyId}/settings`);
 }

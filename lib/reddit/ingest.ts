@@ -1,6 +1,7 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { classifyPost } from "@/lib/ai/classifier";
+import { notifyNewRelevantPosts } from "@/lib/notifications/relevant-posts";
 import {
   ApifyRunError,
   parseRunResult,
@@ -98,13 +99,18 @@ export async function insertAndClassifyPosts(
     .select("id, author, url, content, company_id, subreddit");
   if (error) throw new Error(error.message);
 
-  await Promise.allSettled(
-    (inserted ?? [])
-      .filter(
-        (p): p is typeof p & { author: string; content: string; company_id: string } =>
-          p.company_id !== null && p.author !== null && p.content !== null,
-      )
-      .map((p) => classifyPost(p)),
+  const classifiable = (inserted ?? []).filter(
+    (p): p is typeof p & { author: string; content: string; company_id: string } =>
+      p.company_id !== null && p.author !== null && p.content !== null,
+  );
+  await Promise.allSettled(classifiable.map((p) => classifyPost(p)));
+
+  // Fires after classification above has written is_relevant to every row
+  // in this batch — never throws (see its own doc comment), so a broken
+  // email provider can't take down ingestion.
+  await notifyNewRelevantPosts(
+    companyId,
+    classifiable.map((p) => p.id),
   );
 
   return inserted?.length ?? 0;
