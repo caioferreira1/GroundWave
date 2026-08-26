@@ -39,7 +39,7 @@ trecho abaixo ainda disser o nome antigo, é resquício).*
     eles.
 - ✅ **Fase 1 completa**: repo em `Ground Wave/maa-reddit-app`, código no
   GitHub (`caioferreira1/GroundWave`, branch `main`), deploy automático na
-  Vercel (`https://maa-reddit-app.vercel.app`), Supabase próprio com as
+  Vercel (`https://groundwvhub.vercel.app`), Supabase próprio com as
   migrations aplicadas, auth + aprovação de staff + CRUD de empresa
   funcionando de ponta a ponta (testado).
 - ✅ **Passo 0 (chave do Lovable AI Gateway) resolvido** — ver seção própria
@@ -619,7 +619,10 @@ empresas/personas e a ação de marcar como postado.
   integration — todo push em `main` dispara deploy automático.
 - Vercel: projeto `groundwave/maa-reddit-app`, env vars de produção/preview já
   configuradas (Supabase, AI proxy, `CRON_SECRET`). URL:
-  `https://maa-reddit-app.vercel.app`. **A partir da Fase 6, `RAPIDAPI_HOST`/
+  `https://groundwvhub.vercel.app` (renomeado; a URL antiga
+  `maa-reddit-app.vercel.app` passou a retornar `DEPLOYMENT_NOT_FOUND` —
+  o GitHub Actions [reddit-ingest-cron.yml](../.github/workflows/reddit-ingest-cron.yml)
+  e este doc foram atualizados pra URL nova em 2026-08-26). **A partir da Fase 6, `RAPIDAPI_HOST`/
   `RAPIDAPI_KEYS` saem e entram duas variáveis novas** — precisa ser setado
   à mão em Production + Preview (Project Settings → Environment Variables),
   mesmo lugar onde as chaves da RapidAPI estavam:
