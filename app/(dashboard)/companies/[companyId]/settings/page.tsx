@@ -35,7 +35,7 @@ export default async function CompanySettingsPage({
   const { data: company } = await supabase
     .from("companies")
     .select(
-      "id, website_url, search_keywords, suggested_subreddits, posts_min_upvotes, posts_fetch_frequency_hours, posts_fetch_hour_utc, posts_sort, posts_time_window, posts_max_per_run, posts_fetch_enabled, profile, guardrails_md, inbound_webhook_token, activity_generic_comments_per_week, activity_target_comments_per_week, activity_generic_post_interval_days, activity_company_post_per_week, activity_generic_posts_before_target",
+      "id, website_url, search_keywords, suggested_subreddits, posts_min_upvotes, posts_fetch_frequency_hours, posts_sort, posts_time_window, posts_max_per_run, posts_fetch_enabled, profile, guardrails_md, inbound_webhook_token, activity_generic_comments_per_week, activity_target_comments_per_week, activity_generic_post_interval_days, activity_company_post_per_week, activity_generic_posts_before_target",
     )
     .eq("id", companyId)
     .maybeSingle();
@@ -134,23 +134,17 @@ export default async function CompanySettingsPage({
                   defaultValue={company.posts_max_per_run}
                 />
               </Field>
-              <Field label="Fetch frequency (hours)" htmlFor="posts_fetch_frequency_hours">
+              <Field
+                label="Fetch frequency (hours)"
+                htmlFor="posts_fetch_frequency_hours"
+                hint="Checked once daily (Vercel's cron), so values under 24 behave the same as 24 — every enabled company runs at most once a day."
+              >
                 <Input
                   id="posts_fetch_frequency_hours"
                   name="posts_fetch_frequency_hours"
                   type="number"
                   min={1}
                   defaultValue={company.posts_fetch_frequency_hours}
-                />
-              </Field>
-              <Field label="Fetch hour (UTC)" htmlFor="posts_fetch_hour_utc">
-                <Input
-                  id="posts_fetch_hour_utc"
-                  name="posts_fetch_hour_utc"
-                  type="number"
-                  min={0}
-                  max={23}
-                  defaultValue={company.posts_fetch_hour_utc}
                 />
               </Field>
             </div>

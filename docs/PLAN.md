@@ -12,14 +12,17 @@ trecho abaixo ainda disser o nome antigo, é resquício).*
 
 ## Status atual (ler isto primeiro se estiver retomando o projeto)
 
-- ✅ **Gatilho do cron de ingestão migrado da Vercel pro GitHub Actions**
-  (`.github/workflows/reddit-ingest-cron.yml`, roda de hora em hora, minuto
-  5) — resolve a limitação do plano Hobby (1 cron/dia) que fazia o campo
-  "Fetch hour (UTC)" da UI de Settings ser decorativo. Detalhes na seção
-  "Infra em produção" (busca por "Limitação do plano Hobby"). **Testado de
-  ponta a ponta e funcionando**: confirmado via disparo manual que a rota
-  responde 200 e dispara o Apify pra empresa devida na hora certa.
-  - Durante a configuração, o secret `CRON_SECRET` colado no GitHub batia
+- ✅ **Gatilho do cron de ingestão voltou a ser o cron nativo da Vercel**
+  (2026-08-27). Passou por GitHub Actions (hourly) no meio do caminho, mas
+  o `schedule:` do GitHub se mostrou pouco confiável em produção (disparos
+  atrasados/pulados sem aviso — ver seção "Infra em produção", busca por
+  "Limitação do plano Hobby"). Como nenhuma empresa precisa de frequência
+  sub-diária, voltamos pro cron nativo (`vercel.json`, 1x/dia); o campo
+  "Fetch hour (UTC)" por empresa foi removido da UI de Settings (não fazia
+  mais sentido com só 1 janela de disparo global/dia).
+  - Nota histórica sobre o secret (ainda válida, o mecanismo de auth da rota
+    não mudou): durante a configuração do GitHub Actions, o `CRON_SECRET`
+    colado no GitHub batia
     (mesmo tamanho, sem prefixo `Bearer`, sem espaço) mas a rota continuava
     dando 401. Causa raiz: `CRON_SECRET` está marcado como env var
     **"Sensitive"** na Vercel (Project Settings → Environment Variables) —
@@ -33,10 +36,10 @@ trecho abaixo ainda disser o nome antigo, é resquício).*
     pra propagar**, não basta salvar) e sincronizado o novo valor em
     `.env.local`. **Se `CRON_SECRET` precisar ser trocado de novo no
     futuro**, repetir esse fluxo (rotacionar, não tentar "recuperar" o
-    valor antigo) e lembrar de atualizar o secret correspondente no GitHub
-    Actions também — os dois lados (Vercel + GitHub) precisam ser
-    atualizados juntos, manualmente, não há sincronização automática entre
-    eles.
+    valor antigo) — com o cron nativo da Vercel não precisa mais sincronizar
+    nada em outro lugar (era só o GitHub Actions, que não existe mais); a
+    própria Vercel injeta `Authorization: Bearer $CRON_SECRET` sozinha ao
+    chamar o cron (ver comentário em `.env.example`).
 - ✅ **Fase 1 completa**: repo em `Ground Wave/maa-reddit-app`, código no
   GitHub (`caioferreira1/GroundWave`, branch `main`), deploy automático na
   Vercel (`https://groundwvhub.vercel.app`), Supabase próprio com as
@@ -638,23 +641,23 @@ empresas/personas e a ação de marcar como postado.
   - Não precisa mais confirmar Fluid Compute — o redesenho assíncrono (ver
     "Fase 6 — notas de implementação") tirou essa dependência: nenhuma rota
     segura uma requisição por mais que alguns segundos agora.
-- ~~**Limitação do plano Hobby**: cron só roda 1x/dia~~ — **resolvido**: o
-  gatilho não é mais o cron da Vercel. `vercel.json` não declara mais
-  `crons`; quem chama `api/cron/reddit-ingest` agora é
-  `.github/workflows/reddit-ingest-cron.yml`, de hora em hora (`7 * * * *`,
-  UTC), via `curl` com `Authorization: Bearer $CRON_SECRET` (secret do GitHub
-  Actions, precisa ter o mesmo valor da env var `CRON_SECRET` na Vercel — **o
-  usuário precisa cadastrar isso manualmente** em
-  Settings → Secrets and variables → Actions do repo no GitHub). A lógica de
-  "due" dentro da rota (`posts_fetch_hour_utc`/`posts_fetch_frequency_hours`
-  em `app/api/cron/reddit-ingest/route.ts`) não mudou — ela já comparava a
-  hora configurada contra a hora atual corretamente, só nunca rodava mais de
-  1x/dia pra ter chance de bater. Agora bate de verdade, e frequências abaixo
-  de 24h (6h/12h) também passam a ser respeitadas, sem precisar de upgrade
-  pro plano Pro. Ressalva: workflows agendados do GitHub Actions só rodam na
-  branch default e o GitHub os desativa automaticamente depois de ~60 dias
-  sem commit no repo — se o cron parecer ter parado, checar
-  Actions → reddit-ingest-cron primeiro.
+- ~~**Limitação do plano Hobby**: cron só roda 1x/dia~~ — tentativa de
+  contornar com GitHub Actions (`.github/workflows/reddit-ingest-cron.yml`,
+  hourly) **revertida em 2026-08-27**. O `schedule:` do GitHub Actions se
+  mostrou pouco confiável na prática (GitHub não garante o horário exato nem
+  que todo tick vai disparar — sob carga ele atrasa ou simplesmente pula;
+  confirmado em produção: um dia teve só 2 disparos em 24h, com buraco de
+  11h no meio). Como nenhuma empresa precisa de fato de frequência
+  sub-diária, voltamos pro **cron nativo da Vercel** (`vercel.json` declara
+  `crons` de novo, 1x/dia às 13:00 UTC / 10:00 Brasília) — sem depender de nada externo. O
+  workflow do GitHub Actions foi apagado. Consequência: o campo "Fetch hour
+  (UTC)" por empresa não fazia mais sentido (só existe 1 janela de disparo
+  global/dia) e foi **removido da UI de Settings** — a coluna
+  `posts_fetch_hour_utc` continua no banco, só não é mais lida/escrita pelo
+  app. `posts_fetch_frequency_hours` continua existindo, mas valores abaixo
+  de 24h passam a se comportar como 24h (só há 1 checagem/dia). Se o cron
+  parecer ter parado, checar Vercel → Project → Cron Jobs (não mais GitHub
+  Actions — o workflow não existe mais).
 - Supabase: projeto próprio (ref `xmfmouontuvegtkwwhbw`), migrations
   0001-0014 aplicadas, **0015 ainda pendente de aplicação manual** (0009
   corrige um bug real no trigger `handle_new_user` — `CASE WHEN` sem cast

@@ -2,16 +2,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { dispatchCompanyIngestion, type IngestCompany } from "@/lib/reddit/ingest";
 
 /**
- * Cron entry point, called hourly by .github/workflows/reddit-ingest-cron.yml
- * (Vercel's Hobby plan only allows 1 cron invocation/day, which isn't
- * granular enough for the per-company `posts_fetch_hour_utc` check below to
- * mean anything — see docs/PLAN.md). Requires
+ * Cron entry point, called once daily by Vercel's native cron (see
+ * vercel.json — the Hobby plan caps native crons at 1 invocation/day, which
+ * is why this only ever fires once and every company's fetch frequency is
+ * effectively "at most once a day", see docs/PLAN.md). Requires
  * `Authorization: Bearer ${CRON_SECRET}`; also callable by hand with the
  * same header for manual testing. For each company whose configured fetch
- * frequency has elapsed (and, for daily-or-slower schedules, whose
- * configured hour of day matches the current UTC hour), DISPATCHES an Apify
- * run and returns — it does not wait for the run to finish (a real run has been measured at
- * ~4min, too long to hold this request open). Apify calls back
+ * frequency has elapsed, DISPATCHES an Apify run and returns — it does not
+ * wait for the run to finish (a real run has been measured at ~4min, too
+ * long to hold this request open). Apify calls back
  * app/api/webhooks/apify-run-complete once each run is done, which is where
  * posts actually get ingested/classified. No Fluid Compute dependency here:
  * dispatching is just a couple of fast HTTP calls per company.
@@ -33,7 +32,7 @@ export async function GET(request: Request) {
   const { data: companies, error } = await admin
     .from("companies")
     .select(
-      "id, suggested_subreddits, search_keywords, posts_min_upvotes, posts_sort, posts_time_window, posts_max_per_run, posts_fetch_frequency_hours, posts_fetch_hour_utc, posts_last_scheduled_run_at, posts_fetch_enabled",
+      "id, suggested_subreddits, search_keywords, posts_min_upvotes, posts_sort, posts_time_window, posts_max_per_run, posts_fetch_frequency_hours, posts_last_scheduled_run_at, posts_fetch_enabled",
     );
 
   if (error) {
@@ -41,7 +40,6 @@ export async function GET(request: Request) {
   }
 
   const now = Date.now();
-  const currentHourUtc = new Date().getUTCHours();
   const due = (companies ?? []).filter((c) => {
     if (!c.posts_fetch_enabled) return false;
     if (!c.suggested_subreddits || c.suggested_subreddits.length === 0) return false;
@@ -49,17 +47,9 @@ export async function GET(request: Request) {
     const last = c.posts_last_scheduled_run_at
       ? new Date(c.posts_last_scheduled_run_at).getTime()
       : null;
-
-    if (frequency >= 24) {
-      // Slot-based: run once per scheduled slot, at the configured hour.
-      if ((c.posts_fetch_hour_utc ?? 12) !== currentHourUtc) return false;
-      if (!last) return true;
-      // Slightly under the period so clock drift never skips a slot.
-      return (now - last) / 3_600_000 >= frequency - 1;
-    }
-
     if (!last) return true;
-    return (now - last) / 3_600_000 >= frequency;
+    // Slightly under the period so clock drift never skips this cron's one daily slot.
+    return (now - last) / 3_600_000 >= frequency - 1;
   });
 
   const settled = await Promise.allSettled(

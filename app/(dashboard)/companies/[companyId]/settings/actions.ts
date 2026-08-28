@@ -26,7 +26,6 @@ export async function updateCompanySettings(companyId: string, formData: FormDat
   );
   const postsMinUpvotes = Number(formData.get("posts_min_upvotes") ?? 2);
   const postsFetchFrequencyHours = Number(formData.get("posts_fetch_frequency_hours") ?? 24);
-  const postsFetchHourUtc = Number(formData.get("posts_fetch_hour_utc") ?? 12);
   const postsSort = String(formData.get("posts_sort") ?? "new") as
     | "new"
     | "top"
@@ -54,7 +53,6 @@ export async function updateCompanySettings(companyId: string, formData: FormDat
       suggested_subreddits: suggestedSubreddits,
       posts_min_upvotes: postsMinUpvotes,
       posts_fetch_frequency_hours: postsFetchFrequencyHours,
-      posts_fetch_hour_utc: postsFetchHourUtc,
       posts_sort: postsSort,
       posts_time_window: postsTimeWindow,
       posts_max_per_run: postsMaxPerRun,
