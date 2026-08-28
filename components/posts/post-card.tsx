@@ -240,6 +240,7 @@ export function PostCard({
               isStaff ? (
                 <form action={saveGeneratedCommentAction} className="space-y-2">
                   <Textarea
+                    key={post.generated_comment}
                     name="generated_comment"
                     rows={3}
                     defaultValue={post.generated_comment}
