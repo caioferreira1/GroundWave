@@ -1,6 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { siteUrl } from "@/lib/site-url";
 
 type RelevantPostRow = {
   id: string;
@@ -18,14 +19,6 @@ type RelevantPostRow = {
 // (that was tried and reverted — see git history — in favor of one number
 // everyone understands).
 const MIN_RELEVANCE_SCORE_FOR_EMAIL = 85;
-
-function siteUrl(): string {
-  const explicit = process.env.NEXT_PUBLIC_SITE_URL;
-  if (explicit) return explicit.replace(/\/$/, "");
-  const vercelUrl = process.env.VERCEL_URL;
-  if (vercelUrl) return `https://${vercelUrl}`;
-  return "http://localhost:3000";
-}
 
 function escapeHtml(value: string): string {
   return value

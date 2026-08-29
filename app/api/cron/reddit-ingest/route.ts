@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { dispatchCompanyIngestion, type IngestCompany } from "@/lib/reddit/ingest";
+import { siteUrl } from "@/lib/site-url";
 
 /**
  * Cron entry point, called once daily by Vercel's native cron (see
@@ -26,7 +27,12 @@ export async function GET(request: Request) {
   if (!webhookSecret) {
     return Response.json({ error: "APIFY_WEBHOOK_SECRET is not configured." }, { status: 500 });
   }
-  const webhookUrl = `${new URL(request.url).origin}/api/webhooks/apify-run-complete?secret=${encodeURIComponent(webhookSecret)}`;
+  // Built from the stable production domain, not this request's own origin
+  // — Vercel's native cron invokes this route against the ephemeral
+  // per-deployment URL, which sits behind Vercel's Deployment Protection
+  // (SSO wall) and would make Apify's callback bounce with 401 before ever
+  // reaching our webhook handler. See lib/site-url.ts.
+  const webhookUrl = `${siteUrl()}/api/webhooks/apify-run-complete?secret=${encodeURIComponent(webhookSecret)}`;
 
   const admin = createAdminClient();
   const { data: companies, error } = await admin

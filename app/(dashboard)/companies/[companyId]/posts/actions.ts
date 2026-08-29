@@ -1,11 +1,11 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { requireStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { generateReply } from "@/lib/ai/reply-generator";
 import { dispatchCompanyIngestion, type IngestCompany } from "@/lib/reddit/ingest";
+import { siteUrl } from "@/lib/site-url";
 
 /**
  * Dispatches the Apify Reddit scraper for this company in the background —
@@ -49,10 +49,11 @@ export async function runIngestionNow(companyId: string): Promise<{ error: strin
 
   const webhookSecret = process.env.APIFY_WEBHOOK_SECRET;
   if (!webhookSecret) return { error: "APIFY_WEBHOOK_SECRET is not configured." };
-  const hdrs = await headers();
-  const host = hdrs.get("host") ?? "localhost:3000";
-  const proto = hdrs.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const webhookUrl = `${proto}://${host}/api/webhooks/apify-run-complete?secret=${encodeURIComponent(webhookSecret)}`;
+  // Built from the stable production domain, not this request's own host —
+  // see lib/site-url.ts: the per-deployment URL sits behind Vercel's
+  // Deployment Protection (SSO wall), which would make Apify's callback
+  // bounce with 401 before ever reaching our webhook handler.
+  const webhookUrl = `${siteUrl()}/api/webhooks/apify-run-complete?secret=${encodeURIComponent(webhookSecret)}`;
 
   // Errors here mean the run couldn't even be started (e.g. bad token);
   // those are persisted to companies.posts_last_error by
