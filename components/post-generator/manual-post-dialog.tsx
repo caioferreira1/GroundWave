@@ -9,11 +9,13 @@ type StaffMember = { id: string; display_name: string | null; email: string | nu
 type RedditAccount = { id: string; account_name: string };
 
 /**
- * Native <dialog> instead of a custom overlay component — showModal() gives
- * us centering, focus trap, and Esc-to-close for free, no extra dependency
- * needed for what is currently this app's only modal.
+ * Mirrors ManualCommentDialog (components/posts/manual-comment-dialog.tsx):
+ * a native <dialog> for logging an original post staff already wrote and
+ * published on Reddit themselves, without going through AI generation. The
+ * row is inserted already marked posted, same one-step UX as a manual
+ * comment.
  */
-export function ManualCommentDialog({
+export function ManualPostDialog({
   action,
   staffMembers,
   currentUserId,
@@ -39,10 +41,10 @@ export function ManualCommentDialog({
     startTransition(async () => {
       try {
         await action(formData);
-        toast.success("Comment logged!");
+        toast.success("Post logged!");
         close();
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : "Failed to log comment.");
+        toast.error(err instanceof Error ? err.message : "Failed to log post.");
       }
     });
   }
@@ -50,7 +52,7 @@ export function ManualCommentDialog({
   return (
     <>
       <Button type="button" variant="secondary" onClick={() => dialogRef.current?.showModal()}>
-        <Plus className="h-4 w-4" /> Log a manual comment
+        <Plus className="h-4 w-4" /> Log a manual post
       </Button>
 
       <dialog
@@ -63,29 +65,34 @@ export function ManualCommentDialog({
       >
         <form ref={formRef} onSubmit={handleSubmit} className="space-y-4 p-5">
           <div className="space-y-1">
-            <h2 className="text-sm font-semibold text-foreground">Log a manual comment</h2>
+            <h2 className="text-sm font-semibold text-foreground">Log a manual post</h2>
             <p className="text-xs text-muted-foreground">
-              For a reply posted on a thread we never ingested or classified — paste the link and
-              the comment, credit who posted it, and it counts toward this company&apos;s metrics
-              just like an AI-assisted reply.
+              For an original post staff wrote and published on Reddit without AI generation —
+              credit who posted it, and it counts toward this company&apos;s metrics just like a
+              generated post.
             </p>
           </div>
 
-          <Field label="Reddit post URL" htmlFor="manual-url">
+          <Field label="Subreddit" htmlFor="manual-post-subreddit">
             <Input
-              id="manual-url"
-              name="url"
-              type="url"
+              id="manual-post-subreddit"
+              name="subreddit"
               required
-              placeholder="https://reddit.com/r/..."
+              placeholder="subredditname"
               autoFocus
             />
           </Field>
-          <Field label="Our comment" htmlFor="manual-comment">
-            <Textarea id="manual-comment" name="comment" rows={3} required />
+          <Field label="Theme / topic" htmlFor="manual-post-theme">
+            <Input id="manual-post-theme" name="theme" required placeholder="e.g. productivity tips" />
           </Field>
-          <Field label="Posted by" htmlFor="manual-posted-by">
-            <Select id="manual-posted-by" name="posted_by" defaultValue={currentUserId ?? ""} required>
+          <Field label="Title" htmlFor="manual-post-title">
+            <Input id="manual-post-title" name="title" required />
+          </Field>
+          <Field label="Body" htmlFor="manual-post-body">
+            <Textarea id="manual-post-body" name="body" rows={4} required />
+          </Field>
+          <Field label="Posted by" htmlFor="manual-post-posted-by">
+            <Select id="manual-post-posted-by" name="posted_by" defaultValue={currentUserId ?? ""} required>
               <option value="" disabled>
                 Who posted this?
               </option>
@@ -99,8 +106,8 @@ export function ManualCommentDialog({
 
           {accounts.length > 0 && (
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Reddit account" htmlFor="manual-reddit-account">
-                <Select id="manual-reddit-account" name="reddit_account_id" defaultValue="">
+              <Field label="Reddit account" htmlFor="manual-post-reddit-account">
+                <Select id="manual-post-reddit-account" name="reddit_account_id" defaultValue="">
                   <option value="">No account tracked</option>
                   {accounts.map((a) => (
                     <option key={a.id} value={a.id}>
@@ -109,8 +116,8 @@ export function ManualCommentDialog({
                   ))}
                 </Select>
               </Field>
-              <Field label="Type" htmlFor="manual-comment-type">
-                <Select id="manual-comment-type" name="comment_type" defaultValue="generic">
+              <Field label="Type" htmlFor="manual-post-type">
+                <Select id="manual-post-type" name="post_type" defaultValue="generic">
                   <option value="generic">Generic</option>
                   <option value="contribuites">Contribuites</option>
                   <option value="target">Target — mentions the company</option>
@@ -124,7 +131,7 @@ export function ManualCommentDialog({
               Cancel
             </button>
             <button type="submit" className={buttonClass("secondary", "sm")} disabled={isPending}>
-              {isPending ? "Logging…" : "Log comment"}
+              {isPending ? "Logging…" : "Log post"}
             </button>
           </div>
         </form>

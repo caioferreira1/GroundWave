@@ -35,7 +35,8 @@ export function PostedStatus({
           <Badge variant="good">
             Posted{post.posted_by_display_name && ` by ${post.posted_by_display_name}`}
             {post.reddit_account_name && ` · u/${post.reddit_account_name}`}
-            {post.post_type && ` · ${post.post_type === "company_mention" ? "company mention" : "generic"}`}
+            {post.post_type &&
+              ` · ${post.post_type === "target" ? "target" : post.post_type === "contribuites" ? "contribuites" : "generic"}`}
           </Badge>
           <form action={actions.unmarkPostedAction.bind(null, post.id)}>
             <SubmitButton variant="ghost" size="sm" pendingText="Unmarking…">
@@ -90,10 +91,11 @@ export function PostedStatus({
               </Select>
               <Select
                 name="post_type"
-                defaultValue={crossCompanyPicker ? "generic" : "company_mention"}
+                defaultValue={crossCompanyPicker ? "generic" : "target"}
                 className="h-8 w-auto text-xs"
               >
-                <option value="company_mention">Company mention</option>
+                <option value="target">Target — mentions the company</option>
+                <option value="contribuites">Contribuites</option>
                 <option value="generic">Generic</option>
               </Select>
             </>

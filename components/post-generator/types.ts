@@ -8,7 +8,7 @@ export type PostGenerationRow = {
   posted_at: string | null;
   posted_by_display_name: string | null;
   reddit_account_name: string | null;
-  post_type: "generic" | "company_mention" | null;
+  post_type: "generic" | "contribuites" | "target" | null;
   views_count: number | null;
 };
 

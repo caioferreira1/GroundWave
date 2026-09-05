@@ -32,7 +32,7 @@ export type PostCardData = {
   comment_posted_at: string | null;
   comment_views_count: number | null;
   is_manual: boolean;
-  comment_type: "generic" | "target" | null;
+  comment_type: "generic" | "contribuites" | "target" | null;
 };
 
 type StaffMember = { id: string; display_name: string | null; email: string | null };
@@ -313,7 +313,8 @@ export function PostCard({
                             defaultValue="target"
                             className="h-8 w-auto text-xs"
                           >
-                            <option value="target">Target (mentions/contributes)</option>
+                            <option value="target">Target — mentions the company</option>
+                            <option value="contribuites">Contribuites</option>
                             <option value="generic">Generic</option>
                           </Select>
                         </>

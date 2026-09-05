@@ -68,7 +68,8 @@ export async function markPostGenerationPosted(id: string, formData: FormData) {
   const postedBy = String(formData.get("posted_by") ?? "").trim() || user.id;
   const redditAccountId = String(formData.get("reddit_account_id") ?? "").trim() || null;
   const postTypeRaw = String(formData.get("post_type") ?? "").trim();
-  const postType = postTypeRaw === "generic" || postTypeRaw === "company_mention" ? postTypeRaw : null;
+  const postType =
+    postTypeRaw === "generic" || postTypeRaw === "contribuites" || postTypeRaw === "target" ? postTypeRaw : null;
 
   const supabase = await createClient();
   const { data: posterRoles, error: roleError } = await supabase

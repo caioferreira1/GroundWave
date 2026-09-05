@@ -173,9 +173,9 @@ export async function getViewsTrend(
 /**
  * All-time totals — a different, wider window than the 30-day trend charts
  * above. `postsPosted`/`commentsPosted` are deliberately target-only
- * (post_type='company_mention' / comment_type='target') — the headline
- * numbers on the company Overview page, unlike every chart below them, don't
- * mix in generic (non-company) activity. `reportedViews` intentionally
+ * (post_type='target' / comment_type='target') — the headline numbers on the
+ * company Overview page, unlike every chart below them, don't mix in generic
+ * or contribuites (non-targeted) activity. `reportedViews` intentionally
  * still mixes in generic activity (unlike postsPosted/commentsPosted), per
  * product decision — but, like every other query in this file, only counts
  * rows that are actually posted (posted_at/comment_posted_at set), so a
@@ -193,7 +193,7 @@ export async function getOverviewTotals(
       .select("id", { count: "exact", head: true })
       .eq("company_id", companyId)
       .eq("mode", "company")
-      .eq("post_type", "company_mention")
+      .eq("post_type", "target")
       .not("posted_at", "is", null),
     supabase
       .from("posts")

@@ -135,11 +135,16 @@ export async function saveGeneratedComment(companyId: string, postId: string, fo
 }
 
 /** Reads the optional reddit_account_id/comment_type fields shared by markCommentPosted and addManualComment. */
-function readActivityTagging(formData: FormData): { redditAccountId: string | null; commentType: "generic" | "target" | null } {
+function readActivityTagging(formData: FormData): {
+  redditAccountId: string | null;
+  commentType: "generic" | "contribuites" | "target" | null;
+} {
   const redditAccountId = String(formData.get("reddit_account_id") ?? "").trim() || null;
   const commentTypeRaw = String(formData.get("comment_type") ?? "").trim();
-  const commentType: "generic" | "target" | null =
-    commentTypeRaw === "generic" || commentTypeRaw === "target" ? commentTypeRaw : null;
+  const commentType: "generic" | "contribuites" | "target" | null =
+    commentTypeRaw === "generic" || commentTypeRaw === "contribuites" || commentTypeRaw === "target"
+      ? commentTypeRaw
+      : null;
   return { redditAccountId, commentType };
 }
 

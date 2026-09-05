@@ -80,7 +80,7 @@ export default async function AccountsPage() {
   const targetByAccountCompany = new Map<string, Map<string, Metric>>();
 
   for (const row of postGenerations ?? []) {
-    if (!row.reddit_account_id || row.post_type !== "company_mention" || !row.company_id) continue;
+    if (!row.reddit_account_id || row.post_type !== "target" || !row.company_id) continue;
     addCompanyMetric(targetByAccountCompany, row.reddit_account_id, row.company_id, "posts");
   }
   for (const row of comments ?? []) {

@@ -4,6 +4,7 @@ import { getAllRedditAccountsForCompany } from "@/lib/activity/accounts";
 import { EmptyState, PageHeading } from "@/components/ui";
 import { GenerationPanel } from "@/components/post-generator/generation-panel";
 import { PostGenerationCard } from "@/components/post-generator/post-generation-card";
+import { ManualPostDialog } from "@/components/post-generator/manual-post-dialog";
 import type { PostGenerationActions, PostGenerationRow } from "@/components/post-generator/types";
 import {
   generatePost,
@@ -11,6 +12,7 @@ import {
   markPostGenerationPosted,
   unmarkPostGenerationPosted,
   setPostGenerationViews,
+  addManualPostGeneration,
 } from "./actions";
 
 export default async function CompanyPostGeneratorPage({
@@ -73,6 +75,7 @@ export default async function CompanyPostGeneratorPage({
 
   const boundGenerate = generatePost.bind(null, companyId);
   const boundDelete = deletePostGeneration.bind(null, companyId);
+  const boundAddManualPost = addManualPostGeneration.bind(null, companyId);
 
   const postGenerationActions: PostGenerationActions = {
     isStaff,
@@ -86,10 +89,20 @@ export default async function CompanyPostGeneratorPage({
 
   return (
     <div className="space-y-6">
-      <PageHeading
-        title="Post Generator"
-        description="Generate original Reddit posts for this company's suggested subreddits."
-      />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <PageHeading
+          title="Post Generator"
+          description="Generate original Reddit posts for this company's suggested subreddits."
+        />
+        {isStaff && (
+          <ManualPostDialog
+            action={boundAddManualPost}
+            staffMembers={staffMembers}
+            currentUserId={user?.id ?? null}
+            accounts={activeAccounts}
+          />
+        )}
+      </div>
 
       {isStaff ? (
         <GenerationPanel

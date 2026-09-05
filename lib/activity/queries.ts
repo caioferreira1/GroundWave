@@ -118,14 +118,14 @@ export async function getWeekActivityForRotation(
     if (!row.reddit_account_id || !row.posted_at) continue;
     const entry = postsByAccount.get(row.reddit_account_id) ?? { generic: 0, company_mention: 0 };
     if (row.post_type === "generic") entry.generic += 1;
-    else if (row.post_type === "company_mention") entry.company_mention += 1;
+    else if (row.post_type === "target") entry.company_mention += 1;
     postsByAccount.set(row.reddit_account_id, entry);
 
     const day = row.posted_at.slice(0, 10);
     const byDay = postsByAccountByDay.get(row.reddit_account_id) ?? new Map<string, { generic: number; company_mention: number }>();
     const dayEntry = byDay.get(day) ?? { generic: 0, company_mention: 0 };
     if (row.post_type === "generic") dayEntry.generic += 1;
-    else if (row.post_type === "company_mention") dayEntry.company_mention += 1;
+    else if (row.post_type === "target") dayEntry.company_mention += 1;
     byDay.set(day, dayEntry);
     postsByAccountByDay.set(row.reddit_account_id, byDay);
   }
@@ -139,7 +139,7 @@ export async function getWeekActivityForRotation(
     if (row.post_type === "generic" && !lastGenericPostAt.has(row.reddit_account_id)) {
       lastGenericPostAt.set(row.reddit_account_id, row.posted_at);
     }
-    if (row.post_type === "company_mention" && !lastCompanyMentionPostAt.has(row.reddit_account_id)) {
+    if (row.post_type === "target" && !lastCompanyMentionPostAt.has(row.reddit_account_id)) {
       lastCompanyMentionPostAt.set(row.reddit_account_id, row.posted_at);
     }
   }
@@ -152,7 +152,7 @@ export async function getWeekActivityForRotation(
   const resolvedForMention = new Set<string>();
   for (const row of combinedAllPosts) {
     if (!row.reddit_account_id || resolvedForMention.has(row.reddit_account_id)) continue;
-    if (row.post_type === "company_mention") {
+    if (row.post_type === "target") {
       resolvedForMention.add(row.reddit_account_id);
       if (!genericPostsSinceLastCompanyMention.has(row.reddit_account_id)) {
         genericPostsSinceLastCompanyMention.set(row.reddit_account_id, 0);
@@ -225,7 +225,7 @@ export async function getTodaysRealActivity(
     if (!row.reddit_account_id) continue;
     const entry = posts.get(row.reddit_account_id) ?? { generic: 0, company_mention: 0 };
     if (row.post_type === "generic") entry.generic += 1;
-    else if (row.post_type === "company_mention") entry.company_mention += 1;
+    else if (row.post_type === "target") entry.company_mention += 1;
     posts.set(row.reddit_account_id, entry);
   }
 

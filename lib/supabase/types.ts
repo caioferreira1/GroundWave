@@ -175,7 +175,7 @@ export type Database = {
           comment_views_count: number | null;
           is_manual: boolean;
           reddit_account_id: string | null;
-          comment_type: "generic" | "target" | null;
+          comment_type: "generic" | "contribuites" | "target" | null;
           created_at: string;
           updated_at: string;
         };
@@ -216,7 +216,7 @@ export type Database = {
           posted_by: string | null;
           views_count: number | null;
           reddit_account_id: string | null;
-          post_type: "generic" | "company_mention" | null;
+          post_type: "generic" | "contribuites" | "target" | null;
           created_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["post_generations"]["Row"]> & {
