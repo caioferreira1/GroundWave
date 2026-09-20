@@ -808,3 +808,103 @@ alter table public.posts add constraint posts_comment_type_check
 
 alter table public.post_generations add constraint post_generations_post_type_check
   check (post_type in ('generic', 'contribuites', 'target'));
+
+-- ===== 0027_scheduled_posts.sql =====
+-- Editorial calendar for planned Reddit posts across every company, replacing
+-- a manually-maintained static HTML planning doc. Tracks POSTS only (not
+-- comment quotas — those stay in the existing rotation/activity system,
+-- lib/activity/rotation.ts). Organized by real ISO calendar week (iso_year +
+-- iso_week, see lib/schedule/iso-week.ts), not "week N of the contract", so
+-- the same table works across every company's own start date. A global
+-- table (like reddit_accounts since 0022) — company_id tags which company a
+-- post belongs to, it does not scope the table to one company.
+
+create table public.scheduled_posts (
+  id uuid primary key default gen_random_uuid(),
+
+  company_id uuid not null references public.companies (id) on delete cascade,
+  -- Soft link: an account can be deactivated/removed without losing the
+  -- historical plan row, same on-delete-set-null policy as
+  -- posts.reddit_account_id / post_generations.reddit_account_id (0017).
+  reddit_account_id uuid references public.reddit_accounts (id) on delete set null,
+
+  -- Free text, not an enum/CHECK — adding a new collaborator must never
+  -- require a migration. Constrained only in the UI
+  -- (components/schedule/constants.ts).
+  collaborator text,
+
+  post_kind text not null check (post_kind in ('target', 'generic')),
+
+  -- Real ISO-8601 week-of-year, computed by lib/schedule/iso-week.ts at
+  -- write time from the <input type="week"> value — never re-derived from
+  -- planned_date, since planned_date is optional and a week can exist
+  -- without a specific day picked yet.
+  iso_year integer not null check (iso_year between 2000 and 2100),
+  iso_week integer not null check (iso_week between 1 and 53),
+
+  -- Optional specific day within that ISO week — not required at creation
+  -- (the user picks a week, not a date), filled in later once the exact
+  -- publish day is locked in.
+  planned_date date,
+
+  title text not null,
+  body_copy text not null,
+  -- Combines the source doc's "format" + "theme" line into one free-text note.
+  format_note text,
+  objective_note text,
+
+  post_url text,
+  is_posted boolean not null default false,
+  posted_at timestamptz,
+
+  created_by uuid not null references public.profiles (id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Main query pattern: "give me everything for this ISO week, across
+-- companies" (page.tsx groups by week first, filters by company second).
+create index scheduled_posts_week_idx on public.scheduled_posts (iso_year, iso_week);
+create index scheduled_posts_company_idx on public.scheduled_posts (company_id);
+
+create trigger scheduled_posts_set_updated_at
+  before update on public.scheduled_posts
+  for each row execute function public.set_updated_at();
+
+alter table public.scheduled_posts enable row level security;
+
+-- Staff-only, same reasoning as reddit_accounts (0017) / daily_task_completions
+-- (0018): operational content-planning data, not something a client should see.
+create policy "staff full access scheduled_posts"
+  on public.scheduled_posts for all to authenticated
+  using (public.is_staff(auth.uid()))
+  with check (public.is_staff(auth.uid()));
+
+-- ===== 0028_schedule_format_tags.sql =====
+-- Turns the schedule feature's free-text "format" note into a proper,
+-- growable tag vocabulary: a small reference table (same shape as other
+-- small lookup tables in this app) plus a nullable FK on scheduled_posts.
+-- Staff can add a new tag from the Schedule UI itself (see
+-- createFormatTag in app/(dashboard)/schedule/actions.ts) — no migration
+-- needed to grow the list, unlike the collaborator free-text column.
+--
+-- scheduled_posts.format_note (0027) is left in place but unused going
+-- forward — its existing values are backfilled into format_tag_id by a
+-- one-off script (scripts/backfill-schedule-format-tags.ts), not by this
+-- migration, so this file only needs to add structure.
+
+create table public.schedule_format_tags (
+  id uuid primary key default gen_random_uuid(),
+  label text not null unique,
+  created_at timestamptz not null default now()
+);
+
+alter table public.schedule_format_tags enable row level security;
+
+create policy "staff full access schedule_format_tags"
+  on public.schedule_format_tags for all to authenticated
+  using (public.is_staff(auth.uid()))
+  with check (public.is_staff(auth.uid()));
+
+alter table public.scheduled_posts
+  add column format_tag_id uuid references public.schedule_format_tags (id) on delete set null;

@@ -260,6 +260,52 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["generic_post_generator_settings"]["Row"]>;
         Relationships: [];
       };
+      scheduled_posts: {
+        Row: {
+          id: string;
+          company_id: string;
+          reddit_account_id: string | null;
+          collaborator: string | null;
+          post_kind: "target" | "generic";
+          iso_year: number;
+          iso_week: number;
+          planned_date: string | null;
+          title: string;
+          body_copy: string;
+          format_note: string | null;
+          format_tag_id: string | null;
+          objective_note: string | null;
+          post_url: string | null;
+          is_posted: boolean;
+          posted_at: string | null;
+          created_by: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["scheduled_posts"]["Row"]> & {
+          company_id: string;
+          post_kind: "target" | "generic";
+          iso_year: number;
+          iso_week: number;
+          title: string;
+          body_copy: string;
+          created_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["scheduled_posts"]["Row"]>;
+        Relationships: [];
+      };
+      schedule_format_tags: {
+        Row: {
+          id: string;
+          label: string;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["schedule_format_tags"]["Row"]> & {
+          label: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["schedule_format_tags"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

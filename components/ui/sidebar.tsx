@@ -2,7 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Building2, LogOut, Menu, Moon, Sparkles, Sun, Users as UsersIcon, X, type LucideIcon } from "lucide-react";
+import {
+  Building2,
+  CalendarClock,
+  LogOut,
+  Menu,
+  Moon,
+  Sparkles,
+  Sun,
+  Users as UsersIcon,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { Logo } from "@/components/logo";
@@ -140,6 +151,14 @@ export function Sidebar({
           ))}
           {isStaff && (
             <NavItem href="/accounts" icon={UsersIcon} label="Accounts" active={pathname.startsWith("/accounts")} />
+          )}
+          {isStaff && (
+            <NavItem
+              href="/schedule"
+              icon={CalendarClock}
+              label="Schedule"
+              active={pathname.startsWith("/schedule")}
+            />
           )}
           {isAdmin && (
             <NavItem

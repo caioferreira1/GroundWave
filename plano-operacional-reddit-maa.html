@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plano operacional Reddit para a Meta-Analysis Academy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,300;6..72,400;6..72,500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#E9EDF0; --paper-2:#F4F6F8; --card:#FFFFFF;
+  --ink:#0F1E29; --ink-2:#3C4E59; --ink-3:#6C7C87;
+  --rule:#C9D3DA; --rule-soft:#DFE6EB;
+  --petrol:#1C4A5A; --signal:#A8681B; --signal-bg:#FBF2E4;
+  --a1:#2E6E7E; --a2:#4557A0; --a3:#79539B; --a4:#2D7355;
+  --w-max:1180px;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:16px;line-height:1.55}
+.wrap{max-width:var(--w-max);margin:0 auto;padding:0 28px}
+h1,h2,h3{font-family:"Newsreader",Georgia,serif;font-weight:400;letter-spacing:-0.01em;margin:0}
+p{margin:0 0 .8em}
+
+.hero{background:var(--ink);color:#E7EDF1;padding:56px 0 0;border-bottom:6px solid var(--petrol)}
+.hero h1{font-size:clamp(2.1rem,4.6vw,3.6rem);line-height:1.05;color:#fff;max-width:20ch}
+.hero .sub{margin-top:18px;max-width:64ch;color:#A9BCC7;font-size:1.02rem}
+.hero-meta{display:flex;flex-wrap:wrap;margin-top:30px;border-top:1px solid #2B3D49}
+.hero-meta div{padding:16px 26px 16px 0;margin-right:26px;border-right:1px solid #2B3D49}
+.hero-meta div:last-child{border-right:0}
+.hero-meta .k{display:block;color:#7E96A4;font-size:.78rem}
+.hero-meta .v{font-family:"Newsreader",serif;font-size:1.65rem;color:#fff;line-height:1.2}
+
+.timeline{margin-top:34px;display:grid;grid-template-columns:repeat(8,1fr);border-top:1px solid #2B3D49}
+.tl-week{padding:18px 10px 26px;border-right:1px solid #2B3D49;position:relative}
+.tl-week:last-child{border-right:0}
+.tl-week.now{background:#17303D}
+.tl-n{font-family:"Newsreader",serif;font-size:1.5rem;color:#fff;line-height:1}
+.tl-d{font-size:.72rem;color:#7E96A4;margin-top:4px;white-space:nowrap}
+.tl-dots{margin-top:12px;display:flex;gap:4px;min-height:14px}
+.dot{width:11px;height:11px;transform:rotate(45deg);background:var(--signal)}
+.dot.none{background:#2B3D49;transform:none;height:2px;width:18px;margin-top:5px}
+.tl-now-label{position:absolute;bottom:6px;left:10px;font-size:.66rem;color:var(--signal)}
+.tl-legend{display:flex;gap:26px;align-items:center;padding:14px 0 30px;font-size:.78rem;color:#7E96A4;flex-wrap:wrap}
+.tl-legend span{display:flex;align-items:center;gap:7px}
+
+section{padding:60px 0}
+.section-head{display:flex;align-items:baseline;gap:18px;border-bottom:2px solid var(--ink);padding-bottom:10px;margin-bottom:28px}
+.section-head h2{font-size:1.9rem}
+.section-head .note{font-size:.86rem;color:var(--ink-3);margin-left:auto;text-align:right}
+
+.roster{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.acct{background:var(--card);border-top:5px solid var(--c);padding:22px 20px}
+.acct .handle{font-weight:600;font-size:.95rem;word-break:break-all}
+.acct .line{font-size:.88rem;color:var(--ink-2);margin:8px 0 16px}
+.acct dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:3px 12px;font-size:.84rem}
+.acct dt{color:var(--ink-3)}
+.acct dd{margin:0;font-weight:600}
+.acct .days{margin-top:14px;padding-top:12px;border-top:1px solid var(--rule-soft);font-size:.82rem}
+.acct .days b{color:var(--c)}
+.acct .subs{margin-top:10px;font-size:.78rem;color:var(--ink-3);line-height:1.5}
+
+.filterbar{position:sticky;top:0;z-index:20;background:var(--ink);border-bottom:1px solid #2B3D49;padding:11px 0}
+.filterbar .wrap{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.filterbar .lbl{color:#7E96A4;font-size:.82rem}
+.fbtn{font-family:inherit;font-size:.83rem;background:transparent;color:#C6D5DE;border:1px solid #334855;padding:6px 13px;border-radius:2px;cursor:pointer}
+.fbtn:hover{border-color:#5B7A89;color:#fff}
+.fbtn[aria-pressed="true"]{background:#fff;color:var(--ink);border-color:#fff;font-weight:600}
+.fbtn:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+
+.week{background:var(--card);margin-bottom:26px;border-left:3px solid var(--rule)}
+.week.has-target{border-left-color:var(--signal)}
+.week-head{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:20px 26px;border-bottom:1px solid var(--rule-soft)}
+.week-head h3{font-size:1.55rem}
+.week-head .dates{color:var(--ink-3);font-size:.92rem}
+.week-head .partial{font-size:.74rem;color:var(--signal);border:1px solid var(--signal);padding:2px 7px;border-radius:2px}
+.counts{margin-left:auto;display:flex;flex-wrap:wrap}
+.counts div{padding:0 16px;border-left:1px solid var(--rule-soft);text-align:center}
+.counts div:first-child{border-left:0}
+.counts .n{font-family:"Newsreader",serif;font-size:1.35rem;line-height:1.1;display:block}
+.counts .n.sig{color:var(--signal)}
+.counts .k{font-size:.72rem;color:var(--ink-3)}
+
+.row{display:grid;grid-template-columns:196px 1fr 236px;border-bottom:1px solid var(--rule-soft)}
+.row:last-of-type{border-bottom:0}
+.row.is-target{background:var(--signal-bg)}
+.row-id{padding:20px 18px 20px 26px;border-left:4px solid var(--c)}
+.row-id .handle{font-weight:600;font-size:.86rem;word-break:break-all;line-height:1.35}
+.row-id .role{font-size:.76rem;color:var(--ink-3);margin-top:4px}
+.tag{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:.74rem;font-weight:600;padding:3px 9px;border-radius:2px}
+.tag.target{background:var(--signal);color:#fff}
+.tag.comm{background:var(--paper);color:var(--ink-2);font-weight:500}
+.tag .di{width:7px;height:7px;background:#fff;transform:rotate(45deg)}
+.row-id .pubday{margin-top:12px;font-size:.78rem;color:var(--ink-2);line-height:1.5}
+.row-id .pubday b{display:block;color:var(--c);font-size:.95rem;font-weight:600}
+
+.row-body{padding:20px 22px;border-left:1px solid var(--rule-soft)}
+.row-body .fmt{font-size:.78rem;color:var(--ink-3);margin-bottom:9px}
+.row-body .fmt b{color:var(--petrol);font-weight:600}
+.row-body .ttl{font-size:1.02rem;color:var(--ink);line-height:1.4;font-weight:600}
+.row-body .bodylbl{font-size:.72rem;color:var(--ink-3);margin:13px 0 5px}
+.row-body .copy{font-size:.89rem;color:var(--ink-2);line-height:1.6;background:var(--paper-2);padding:13px 15px;border-left:2px solid var(--rule)}
+.row.is-target .row-body .copy{background:#fff;border-left-color:var(--signal)}
+.row-body .obj{font-size:.83rem;color:var(--ink-3);margin-top:10px}
+.row-body .disc{margin-top:9px;font-size:.78rem;color:var(--signal)}
+
+.row-side{padding:20px 26px 20px 20px;border-left:1px solid var(--rule-soft);font-size:.82rem}
+.row-side .cnum{font-family:"Newsreader",serif;font-size:1.5rem;line-height:1}
+.row-side .clab{font-size:.74rem;color:var(--ink-3);margin-bottom:6px}
+.row-side .cdays{font-size:.8rem;color:var(--ink-2);margin-bottom:12px}
+.row-side .cdays b{color:var(--c);font-weight:600}
+.row-side ul{margin:0;padding-left:16px;color:var(--ink-2);line-height:1.5}
+.row-side .subs{margin-top:11px;padding-top:9px;border-top:1px solid var(--rule-soft);color:var(--ink-3);font-size:.78rem}
+
+.week-foot{padding:14px 26px;background:var(--paper-2);font-size:.84rem;color:var(--ink-2);display:flex;gap:26px;flex-wrap:wrap}
+.week-foot b{color:var(--ink);font-weight:600}
+.empty-note{padding:22px 26px;color:var(--ink-3);font-size:.88rem;display:none}
+body.filtered .week.hidden .empty-note{display:block}
+.row.hidden{display:none}
+
+table.totals{width:100%;border-collapse:collapse;background:var(--card)}
+table.totals th,table.totals td{text-align:left;padding:13px 16px;border-bottom:1px solid var(--rule-soft);font-size:.9rem}
+table.totals thead th{background:var(--ink);color:#fff;font-weight:500;font-size:.82rem;border-bottom:0}
+table.totals td.num{font-variant-numeric:tabular-nums;text-align:right}
+table.totals tr.total td{font-weight:600;background:var(--paper-2);border-bottom:0}
+.swatch{display:inline-block;width:9px;height:9px;margin-right:8px}
+.fill{background:var(--signal-bg);color:var(--signal);font-weight:600;padding:1px 6px;border-radius:2px;font-size:.85rem}
+
+.check-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.check-col{background:var(--card);padding:22px 20px}
+.check-col h3{font-size:1.1rem;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--rule-soft)}
+.check-col label{display:flex;gap:10px;align-items:flex-start;font-size:.87rem;color:var(--ink-2);padding:5px 0;cursor:pointer;line-height:1.45}
+.check-col input{margin-top:4px;accent-color:var(--petrol);flex:none}
+.check-col input:checked + span{color:var(--ink-3);text-decoration:line-through}
+
+footer{background:var(--ink);color:#7E96A4;padding:34px 0;font-size:.85rem}
+footer strong{color:#C6D5DE;font-weight:500}
+
+@media (max-width:1000px){
+  .roster{grid-template-columns:repeat(2,1fr)}
+  .row{grid-template-columns:1fr}
+  .row-id{padding-bottom:16px}
+  .row-body,.row-side{border-left:4px solid var(--c);padding-left:18px}
+  .check-grid{grid-template-columns:1fr}
+  .timeline{grid-template-columns:repeat(4,1fr)}
+  .tl-week{border-bottom:1px solid #2B3D49}
+}
+@media (max-width:620px){
+  .wrap{padding:0 18px}
+  .roster{grid-template-columns:1fr}
+  .timeline{grid-template-columns:repeat(2,1fr)}
+  .counts{margin-left:0;width:100%;padding-top:10px}
+  .counts div:first-child{padding-left:0}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@media print{
+  body{background:#fff}
+  .filterbar,.tl-legend{display:none}
+  .hero{background:#fff;color:#000;border-bottom:2px solid #000;padding-top:0}
+  .hero h1,.hero-meta .v,.tl-n{color:#000}
+  .week{break-inside:avoid;border:1px solid #999;margin-bottom:14px}
+  .row.hidden,.row{display:grid!important}
+  section{padding:24px 0}
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>Plano operacional Reddit para a Meta-Analysis Academy</h1>
+    <p class="sub">Oito semanas, quatro contas, uma pauta por semana. Cada linha traz o título, um corpo de texto sugerido pronto para adaptar, o dia de publicar e os dias de comentar.</p>
+    <div class="hero-meta">
+      <div><span class="k">Contrato</span><span class="v">10/08 a 08/11</span></div>
+      <div><span class="k">Dias restantes</span><span class="v">54</span></div>
+      <div><span class="k">Posts target</span><span class="v">1 de 10</span></div>
+      <div><span class="k">Restam</span><span class="v">9</span></div>
+      <div><span class="k">Posts de comunidade</span><span class="v">23</span></div>
+    </div>
+    <div class="timeline">
+      <div class="tl-week now"><div class="tl-n">1</div><div class="tl-d">15 a 20 set</div><div class="tl-dots"><div class="dot none"></div></div><div class="tl-now-label">estamos aqui</div></div>
+      <div class="tl-week"><div class="tl-n">2</div><div class="tl-d">21 a 27 set</div><div class="tl-dots"><div class="dot"></div></div></div>
+      <div class="tl-week"><div class="tl-n">3</div><div class="tl-d">28 set a 4 out</div><div class="tl-dots"><div class="dot"></div></div></div>
+      <div class="tl-week"><div class="tl-n">4</div><div class="tl-d">5 a 11 out</div><div class="tl-dots"><div class="dot"></div><div class="dot"></div></div></div>
+      <div class="tl-week"><div class="tl-n">5</div><div class="tl-d">12 a 18 out</div><div class="tl-dots"><div class="dot"></div></div></div>
+      <div class="tl-week"><div class="tl-n">6</div><div class="tl-d">19 a 25 out</div><div class="tl-dots"><div class="dot"></div><div class="dot"></div></div></div>
+      <div class="tl-week"><div class="tl-n">7</div><div class="tl-d">26 out a 1 nov</div><div class="tl-dots"><div class="dot"></div><div class="dot"></div></div></div>
+      <div class="tl-week"><div class="tl-n">8</div><div class="tl-d">2 a 8 nov</div><div class="tl-dots"><div class="dot none"></div></div></div>
+    </div>
+    <div class="tl-legend">
+      <span><i class="dot" style="display:inline-block"></i> cada losango é um post target</span>
+      <span>semanas 5 e 8 concentram relatório e call</span>
+      <span>os 10 posts do contrato fecham em 01/11, uma semana antes do prazo</span>
+    </div>
+  </div>
+</header>
+
+<nav class="filterbar" aria-label="Filtrar por conta">
+  <div class="wrap">
+    <span class="lbl">Ver a pauta de:</span>
+    <button class="fbtn" data-f="all" aria-pressed="true">Todas as contas</button>
+    <button class="fbtn" data-f="a1" aria-pressed="false">u/AutomaticMeringue585</button>
+    <button class="fbtn" data-f="a2" aria-pressed="false">u/bumbale2</button>
+    <button class="fbtn" data-f="a3" aria-pressed="false">u/Sad-Watercress-2240</button>
+    <button class="fbtn" data-f="a4" aria-pressed="false">u/Shoddy-Aioli-4039</button>
+  </div>
+</nav>
+
+<section>
+  <div class="wrap">
+    <div class="section-head">
+      <h2>As quatro contas e seus dias</h2>
+      <div class="note">Nenhuma conta publica no mesmo dia que outra</div>
+    </div>
+    <div class="roster">
+      <div class="acct" style="--c:var(--a1)">
+        <div class="handle">u/AutomaticMeringue585</div>
+        <div class="line">Carreira em pesquisa, IMG, CV, match, congressos</div>
+        <dl><dt>Target</dt><dd>2</dd><dt>Comunidade</dt><dd>6</dd><dt>Comentários</dt><dd>cerca de 44</dd></dl>
+        <div class="days">Publica na <b>terça</b><br>Comenta na segunda, quarta e sexta</div>
+        <div class="subs">r/IMGreddit, r/Residency, r/medicalschool, r/premed</div>
+      </div>
+      <div class="acct" style="--c:var(--a2)">
+        <div class="handle">u/bumbale2</div>
+        <div class="line">Metodologia de revisão sistemática, estatística, software</div>
+        <dl><dt>Target</dt><dd>2</dd><dt>Comunidade</dt><dd>6</dd><dt>Comentários</dt><dd>cerca de 45</dd></dl>
+        <div class="days">Publica na <b>quarta</b><br>Comenta na terça, quinta e sábado</div>
+        <div class="subs">r/AskStatistics, r/statistics, r/AskAcademia, r/biostatistics</div>
+      </div>
+      <div class="acct" style="--c:var(--a3)">
+        <div class="handle">u/Sad-Watercress-2240</div>
+        <div class="line">Iniciantes, dúvidas, discussões, problemas comuns</div>
+        <dl><dt>Target</dt><dd>2</dd><dt>Comunidade</dt><dd>6</dd><dt>Comentários</dt><dd>cerca de 44</dd></dl>
+        <div class="days">Publica na <b>quinta</b><br>Comenta na segunda, quarta e domingo</div>
+        <div class="subs">r/medicalschool, r/AskAcademia, r/GradSchool, r/premed</div>
+      </div>
+      <div class="acct" style="--c:var(--a4)">
+        <div class="handle">u/Shoddy-Aioli-4039</div>
+        <div class="line">Guias, checklists, ferramentas, publicação científica</div>
+        <dl><dt>Target</dt><dd>3</dd><dt>Comunidade</dt><dd>5</dd><dt>Comentários</dt><dd>cerca de 43</dd></dl>
+        <div class="days">Publica na <b>segunda</b><br>Comenta na terça, quinta e sexta</div>
+        <div class="subs">r/AskAcademia, r/PhD, r/ScientificWriting, r/medicalschool</div>
+      </div>
+    </div>
+    <p style="font-size:.88rem;color:var(--ink-2);margin-top:20px;max-width:80ch">Horário sugerido de publicação: entre 9h e 11h no horário de Nova York, que pega a manhã dos Estados Unidos e a tarde da Europa. A semana 2 testa isso contra o final da noite no horário de Brasília. Posts target nunca vão ao ar no fim de semana.</p>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="section-head">
+      <h2>A pauta, semana a semana</h2>
+      <div class="note">O corpo de texto é uma base. Adapte a voz de cada conta antes de publicar.</div>
+    </div>
+
+    <!-- ================= SEMANA 1 ================= -->
+    <article class="week" data-week="1">
+      <div class="week-head"><h3>Semana 1</h3><span class="dates">15 a 20 de setembro</span><span class="partial">semana parcial</span>
+        <div class="counts"><div><span class="n">0</span><span class="k">target</span></div><div><span class="n">4</span><span class="k">comunidade</span></div><div><span class="n">16</span><span class="k">comentários</span></div></div>
+      </div>
+
+      <div class="row" data-acct="a4" style="--c:var(--a4)">
+        <div class="row-id"><div class="handle">u/Shoddy-Aioli-4039</div><div class="role">Guias e ferramentas</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Segunda 15</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>educacional</b>. Tema: registro de protocolo.</div>
+          <div class="ttl">PROSPERO registration: what it is, what it isn't, and the 5 fields people fill in wrong</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Registering a protocol takes an afternoon and saves a lot of trouble later, but the form trips people up. Quick rundown of what PROSPERO is, which is a prospective register and not a peer review or a guarantee of anything, and what it isn't, which is a way to reserve your topic or stop someone else publishing first. The five fields that most often come back for revision: outcomes listed without definitions, search strategy described instead of pasted, unclear screening process, vague risk of bias plan, and a start date set after the work had already begun. Happy to answer questions on any of them.</div>
+        </div>
+        <div class="row-side"><div class="cnum">4</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça e quinta</b></div>
+          <ul><li>registro de protocolo</li><li>PRISMA</li><li>submissão e revistas</li></ul>
+          <div class="subs">r/AskAcademia, r/ScientificWriting</div></div>
+      </div>
+
+      <div class="row" data-acct="a1" style="--c:var(--a1)">
+        <div class="row-id"><div class="handle">u/AutomaticMeringue585</div><div class="role">Carreira e IMG</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Terça 16</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>discussão</b>. Tema: pesquisa e aplicação.</div>
+          <div class="ttl">How much does research volume actually move the needle for IMGs vs. other application factors?</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Every thread here says research matters, but nobody puts a number on it. NRMP data shows matched IMGs carry several times the publication count of matched US MD seniors, which sounds decisive until you notice that unmatched IMGs also publish a lot. So I want to hear from people who actually went through it. When you compare research against Step scores, US clinical experience and letters, where did research really rank? And did anyone get feedback from a program that addressed it directly?</div>
+        </div>
+        <div class="row-side"><div class="cnum">4</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>quarta e sexta</b></div>
+          <ul><li>research positions</li><li>CV de aplicação</li><li>o que os program directors valorizam</li></ul>
+          <div class="subs">r/IMGreddit, r/Residency</div></div>
+      </div>
+
+      <div class="row" data-acct="a2" style="--c:var(--a2)">
+        <div class="row-id"><div class="handle">u/bumbale2</div><div class="role">Metodologia</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Quarta 17</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>dúvida real</b>. Tema: extração de dados.</div>
+          <div class="ttl">Half my studies report median and IQR, half report mean and SD. Convert or run a sensitivity analysis?</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Working on a review with nine included studies. Six report mean and SD, three report median and IQR. I know the Wan and Luo estimators exist, but I keep seeing reviewers push back when conversions make up a third of the sample. My instinct is to run the main analysis with conversions and a sensitivity analysis excluding those three, but I would rather learn from people who have defended this in peer review. What did reviewers actually accept?</div>
+        </div>
+        <div class="row-side"><div class="cnum">4</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>quinta e sábado</b></div>
+          <ul><li>heterogeneidade</li><li>extração de dados</li><li>RevMan e R</li></ul>
+          <div class="subs">r/AskStatistics, r/statistics</div></div>
+      </div>
+
+      <div class="row" data-acct="a3" style="--c:var(--a3)">
+        <div class="row-id"><div class="handle">u/Sad-Watercress-2240</div><div class="role">Iniciantes</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Quinta 18</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>discussão</b>. Tema: como começar pesquisa.</div>
+          <div class="ttl">Is "just do a systematic review" the new default advice for students with no lab access?</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Noticing that the standard answer to "I have no research and no lab access" has become "do a systematic review". It makes sense on paper, since you don't need funding or an ethics committee. But I'm curious about the other side. For people who actually finished one, was it as accessible as it sounds? How long did it really take, what was the part nobody warned you about, and would you give the same advice to someone starting today?</div>
+        </div>
+        <div class="row-side"><div class="cnum">4</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>sexta e domingo</b></div>
+          <ul><li>"how do I start research"</li><li>estudantes sem orientador</li><li>iniciação científica</li></ul>
+          <div class="subs">r/medicalschool, r/premed</div></div>
+      </div>
+
+      <div class="empty-note">Nenhuma tarefa desta conta nesta semana.</div>
+      <div class="week-foot"><span><b>Também nesta semana:</b> auditar a saúde das 4 contas, confirmar Relatório 1 e Call 1, fechar a lista de subreddits e montar a matriz de aprendizado</span></div>
+    </article>
+
+    <!-- ================= SEMANA 2 ================= -->
+    <article class="week has-target" data-week="2">
+      <div class="week-head"><h3>Semana 2</h3><span class="dates">21 a 27 de setembro</span>
+        <div class="counts"><div><span class="n sig">1</span><span class="k">target</span></div><div><span class="n">3</span><span class="k">comunidade</span></div><div><span class="n">23</span><span class="k">comentários</span></div></div>
+      </div>
+
+      <div class="row" data-acct="a4" style="--c:var(--a4)">
+        <div class="row-id"><div class="handle">u/Shoddy-Aioli-4039</div><div class="role">Guias e ferramentas</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Segunda 22</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>erros comuns</b>. Tema: reporte.</div>
+          <div class="ttl">6 PRISMA 2020 items that most reviewer rejections come down to</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Going off patterns in reviewer comments rather than checklist order. The items that most often trigger a revision request: a search strategy summarised instead of pasted in full, no statement of how many reviewers screened and how disagreements were resolved, protocol registration missing or dated after the search, eligibility criteria that appear in the flow diagram but never in the methods, results reported without the certainty assessment, and a flow diagram whose numbers don't add up. That last one is far more common than it should be.</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça, quinta e sexta</b></div>
+          <ul><li>rejeição</li><li>comentários de revisor</li><li>escrita de métodos</li></ul>
+          <div class="subs">r/ScientificWriting, r/AskAcademia</div></div>
+      </div>
+
+      <div class="row" data-acct="a1" style="--c:var(--a1)">
+        <div class="row-id"><div class="handle">u/AutomaticMeringue585</div><div class="role">Carreira e IMG</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Terça 23</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>problema comum e soluções</b>. Tema: congressos.</div>
+          <div class="ttl">Poster accepted at a US conference but you can't afford to go. The options nobody mentions</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">This comes up every year and the advice usually stops at "apply for a travel grant". There is more than that. Most societies have trainee travel awards with deadlines earlier than people expect. Several accept virtual or poster only presentation at a reduced fee. Registration waivers exist but are rarely advertised, so you have to email the organising committee and ask. Some programs and universities have small internal funds that nobody uses. Adding what I know, and I would like to hear what actually worked for people here.</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>segunda, quarta e sexta</b></div>
+          <ul><li>abstracts</li><li>congressos e custos</li><li>visto para conferência</li></ul>
+          <div class="subs">r/IMGreddit, r/Residency</div></div>
+      </div>
+
+      <div class="row is-target" data-acct="a2" style="--c:var(--a2)">
+        <div class="row-id"><div class="handle">u/bumbale2</div><div class="role">Metodologia</div><span class="tag target"><i class="di"></i>Target 2 de 10</span><div class="pubday">Publicar<b>Quarta 24</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>comparação de métodos de aprendizado</b>. Tema: como se aprende metanálise.</div>
+          <div class="ttl">Ways people actually learn meta-analysis, and what each route does and doesn't give you</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">There are four realistic routes and each gives you something different. The Cochrane Handbook is free and complete, and everything else is built on it, but it assumes you already have someone to ask when you get stuck. University short courses give you a few structured days and a certificate, usually strong on statistics and light on the messy parts like screening and writing. YouTube covers software well and methodology badly, because nobody corrects your work. Paid cohort programs, Meta-Analysis Academy among them, add the things the others don't: a deadline, a corrected exercise every week, and other people to co-author with, which is the part most beginners are actually missing. What none of them do is make the project happen for you. Disclosure: I work with the team at Meta-Analysis Academy, so weigh that last paragraph accordingly. Curious which route people here took and what was missing from it.</div>
+          <div class="obj">Objetivo: ser a referência que alguém linka quando perguntarem onde aprender isso.</div>
+          <div class="disc">Vínculo declarado já incluído no corpo do texto.</div>
+        </div>
+        <div class="row-side"><div class="cnum">5</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça, quinta e sábado</b></div>
+          <ul><li>recomendações de curso</li><li>RevMan contra R</li><li>dúvida de modelo estatístico</li></ul>
+          <div class="subs">r/AskStatistics, r/AskAcademia</div></div>
+      </div>
+
+      <div class="row" data-acct="a3" style="--c:var(--a3)">
+        <div class="row-id"><div class="handle">u/Sad-Watercress-2240</div><div class="role">Iniciantes</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Quinta 25</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>ajuda com resposta longa</b>. Tema: escolha de tema.</div>
+          <div class="ttl">How to check in 20 minutes whether your meta-analysis idea has already been done</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Fast way to avoid four months of wasted work. Start with PubMed using the systematic review filter and your PICO terms, not your full question. Then check PROSPERO for registered protocols, because the thing that usually kills a project is not a published review but one registered eight months ago. Then Epistemonikos, which maps reviews to their included studies and shows overlap quickly. Then check the most recent guideline in your area, since a fresh guideline usually means the evidence was just synthesised. If all four come back clean, you probably have something worth pursuing.</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>segunda, quarta e domingo</b></div>
+          <ul><li>escolha de tema</li><li>"minha ideia é boa?"</li><li>redundância na literatura</li></ul>
+          <div class="subs">r/medicalschool, r/AskAcademia</div></div>
+      </div>
+
+      <div class="empty-note">Nenhuma tarefa desta conta nesta semana.</div>
+      <div class="week-foot"><span><b>Teste da semana:</b> horário de publicação, manhã no horário de Nova York contra noite no horário de Brasília</span></div>
+    </article>
+
+    <!-- ================= SEMANA 3 ================= -->
+    <article class="week has-target" data-week="3">
+      <div class="week-head"><h3>Semana 3</h3><span class="dates">28 de setembro a 4 de outubro</span>
+        <div class="counts"><div><span class="n sig">1</span><span class="k">target</span></div><div><span class="n">3</span><span class="k">comunidade</span></div><div><span class="n">23</span><span class="k">comentários</span></div></div>
+      </div>
+
+      <div class="row is-target" data-acct="a4" style="--c:var(--a4)">
+        <div class="row-id"><div class="handle">u/Shoddy-Aioli-4039</div><div class="role">Guias e ferramentas</div><span class="tag target"><i class="di"></i>Target 3 de 10</span><div class="pubday">Publicar<b>Segunda 29</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>checklist</b>. Tema: viabilidade antes de investir meses.</div>
+          <div class="ttl">Feasibility checklist: 8 questions to answer before you commit 4 months to a systematic review</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Before committing months, these eight questions either save the project or kill it early, which is the whole point. Are there at least four or five studies reporting the same outcome in a comparable way? Is there a recent review or guideline covering it already? Are the populations similar enough that pooling means anything? Can you actually access the full texts? Do you have a second person for independent screening? Is the outcome reported consistently, or will you be converting half your data? Does answering the question change anything clinically? And can you finish it in the time you actually have, not the time you wish you had? Disclosure: this is the feasibility step from the Meta-Analysis Academy method, where I work, and it sits at stage three precisely because that is the cheapest point to abandon an idea. Anything you would add to the list?</div>
+          <div class="obj">Objetivo: post salvável, de alta utilidade, com menção verificável.</div>
+          <div class="disc">Vínculo declarado já incluído no corpo do texto.</div>
+        </div>
+        <div class="row-side"><div class="cnum">5</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça, quinta e sexta</b></div>
+          <ul><li>"vale a pena esse tema?"</li><li>protocolo</li><li>planejamento de projeto</li></ul>
+          <div class="subs">r/AskAcademia, r/PhD</div></div>
+      </div>
+
+      <div class="row" data-acct="a1" style="--c:var(--a1)">
+        <div class="row-id"><div class="handle">u/AutomaticMeringue585</div><div class="role">Carreira e IMG</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Terça 30</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>dúvida real</b>. Tema: como abstracts são contados.</div>
+          <div class="ttl">Does a conference abstract count the same as a publication on ERAS? Getting conflicting answers</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Getting contradictory answers on this. ERAS has separate fields for peer reviewed publications, abstracts and presentations, so technically they are counted separately. But the aggregate research count quoted in Charting Outcomes lumps them together, which is why the published numbers look so high. What I want to know from people who have been on the other side of the screen: does a program actually weight a conference abstract close to a full publication, or is it read as a placeholder?</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>segunda, quarta e sexta</b></div>
+          <ul><li>ERAS</li><li>contagem de publicações</li><li>fellowship</li></ul>
+          <div class="subs">r/IMGreddit, r/Residency</div></div>
+      </div>
+
+      <div class="row" data-acct="a2" style="--c:var(--a2)">
+        <div class="row-id"><div class="handle">u/bumbale2</div><div class="role">Metodologia</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Quarta 1</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>educacional</b>. Tema: heterogeneidade.</div>
+          <div class="ttl">I² = 85%. What it does and doesn't tell you, and what to do next</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">High heterogeneity is not automatically a problem, and it is also not something you fix by switching to a random effects model. What I² tells you is the proportion of variance that is not chance. What it does not tell you is whether that variation is clinically meaningful, and it gets unstable with few studies, so an I² from five trials should not drive a decision on its own. Useful next steps, in order: look at the forest plot before the number, check whether the studies are answering the same question, run prespecified subgroups, consider meta-regression only if you have enough studies, and be willing to conclude that pooling was not appropriate. That last option is badly underused.</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça, quinta e sábado</b></div>
+          <ul><li>heterogeneidade</li><li>efeito aleatório</li><li>funnel plot</li></ul>
+          <div class="subs">r/AskStatistics, r/statistics</div></div>
+      </div>
+
+      <div class="row" data-acct="a3" style="--c:var(--a3)">
+        <div class="row-id"><div class="handle">u/Sad-Watercress-2240</div><div class="role">Iniciantes</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Quinta 2</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>discussão</b>. Tema: autoria.</div>
+          <div class="ttl">Author order in student research groups. How does your group decide, and has it ever blown up?</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Genuinely curious how other groups handle this. ICMJE says authorship needs substantial contribution, drafting or revising, final approval and accountability, which sounds clean until six people split screening and everyone technically qualifies. Some groups rotate first author across projects. Some decide upfront before any work starts. Some decide at the end, and it goes badly. What system does your group use, and has it ever caused a real conflict?</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>segunda, quarta e domingo</b></div>
+          <ul><li>autoria</li><li>conflito em grupo</li><li>crédito de contribuição</li></ul>
+          <div class="subs">r/medicalschool, r/GradSchool</div></div>
+      </div>
+
+      <div class="empty-note">Nenhuma tarefa desta conta nesta semana.</div>
+      <div class="week-foot"><span><b>Teste da semana:</b> título em pergunta contra título em afirmação</span></div>
+    </article>
+
+    <!-- ================= SEMANA 4 ================= -->
+    <article class="week has-target" data-week="4">
+      <div class="week-head"><h3>Semana 4</h3><span class="dates">5 a 11 de outubro</span>
+        <div class="counts"><div><span class="n sig">2</span><span class="k">target</span></div><div><span class="n">2</span><span class="k">comunidade</span></div><div><span class="n">22</span><span class="k">comentários</span></div></div>
+      </div>
+
+      <div class="row" data-acct="a4" style="--c:var(--a4)">
+        <div class="row-id"><div class="handle">u/Shoddy-Aioli-4039</div><div class="role">Guias e ferramentas</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Segunda 6</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>guia</b>. Tema: submissão.</div>
+          <div class="ttl">Writing a cover letter that isn't generic: structure and what editors actually read</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Editors read cover letters fast and mostly look for three things: does this fit the scope, is there anything they need to know, and is there a reason to send it out for review rather than desk reject it. A structure that works: one sentence on what the study is and what it found, two or three sentences on why this journal specifically, one sentence on what is new compared to what they have already published, then the standard declarations. What kills it: restating the abstract, calling the findings groundbreaking, and generic praise for the journal. Naming a recent paper from that journal which your work builds on does more than any adjective.</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça, quinta e sexta</b></div>
+          <ul><li>submissão</li><li>desk reject</li><li>escolha de revista</li></ul>
+          <div class="subs">r/ScientificWriting, r/AskAcademia</div></div>
+      </div>
+
+      <div class="row is-target" data-acct="a1" style="--c:var(--a1)">
+        <div class="row-id"><div class="handle">u/AutomaticMeringue585</div><div class="role">Carreira e IMG</div><span class="tag target"><i class="di"></i>Target 4 de 10</span><div class="pubday">Publicar<b>Terça 7</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>discussão de carreira</b>. Tema: que pesquisa constrói carreira.</div>
+          <div class="ttl">Research that builds a career vs. research that builds a CV. Where does meta-analysis actually sit?</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">The criticism is fair and worth stating plainly. Ioannidis documented years ago that a large share of published reviews are redundant or misleading, and that has only accelerated since. So when someone says meta-analysis is CV padding, they are describing something real. But the design is not the problem. A review that answers a question nobody has answered, with a reproducible search and an honest certainty assessment, is a contribution. A twelfth review of the same drug with a new subgroup is not, regardless of design. The difference is rigour and question selection, and both are learnable, which is the argument for structured training rather than figuring it out alone. Disclosure: I work with the team at Meta-Analysis Academy, which is where this view comes from. Where do people here draw the line?</div>
+          <div class="obj">Objetivo: encarar de frente a principal objeção do público em vez de desviar dela.</div>
+          <div class="disc">Vínculo declarado já incluído no corpo do texto.</div>
+        </div>
+        <div class="row-side"><div class="cnum">5</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>segunda, quarta e sexta</b></div>
+          <ul><li>publicação inflada</li><li>críticas a metanálise</li><li>decisões de carreira</li></ul>
+          <div class="subs">r/Residency, r/AskAcademia</div></div>
+      </div>
+
+      <div class="row" data-acct="a2" style="--c:var(--a2)">
+        <div class="row-id"><div class="handle">u/bumbale2</div><div class="role">Metodologia</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Quarta 8</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>ferramentas</b>. Tema: software.</div>
+          <div class="ttl">RevMan vs. R vs. STATA for someone who doesn't code. Honest tradeoffs</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Honest version for someone who does not code. RevMan is free, has a graphical interface and handles standard pairwise meta-analysis fine, which covers most of what people actually need. Its limits show up with network meta-analysis, single arm proportions and custom figures. R with meta or metafor does everything and produces figures journals like, but you will spend the first week fighting data import rather than statistics. STATA sits in between, with clean syntax and good output, if you have access to a licence. Practical advice: start in RevMan, move to R when a project forces you to, and do not treat learning R as a prerequisite for starting.</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça, quinta e sábado</b></div>
+          <ul><li>software</li><li>forest plot</li><li>"preciso aprender R?"</li></ul>
+          <div class="subs">r/AskStatistics, r/statistics</div></div>
+      </div>
+
+      <div class="row is-target" data-acct="a3" style="--c:var(--a3)">
+        <div class="row-id"><div class="handle">u/Sad-Watercress-2240</div><div class="role">Iniciantes</div><span class="tag target"><i class="di"></i>Target 5 de 10</span><div class="pubday">Publicar<b>Quinta 9</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>problema comum e soluções</b>. Tema: pesquisar sem orientador.</div>
+          <div class="ttl">No mentor, no lab, no funding. A realistic map of what you can and can't do</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Realistic map rather than encouragement. What you can do alone: systematic review and meta-analysis, case reports and case series from your own service, analysis of public datasets like NHANES or SEER, and narrative reviews if you have someone senior willing to co-sign. What you cannot do alone: prospective trials, anything requiring ethics approval and recruitment, and lab work. The harder problem is not picking a project. It is that nobody tells you your methodology is wrong until a reviewer does it eight months later. Free ways around that: the Cochrane Handbook, posting your protocol here for feedback, finding a co-author who has already published. Paid ways: structured programs with corrected exercises, including Meta-Analysis Academy, where I work. Disclosure noted for that reason. Neither route removes the work.</div>
+          <div class="obj">Objetivo: o post de maior empatia com a dor central da persona.</div>
+          <div class="disc">Vínculo declarado já incluído no corpo do texto.</div>
+        </div>
+        <div class="row-side"><div class="cnum">5</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>segunda, quarta e domingo</b></div>
+          <ul><li>"como eu começo"</li><li>sem orientador</li><li>primeiro artigo</li></ul>
+          <div class="subs">r/medicalschool, r/premed</div></div>
+      </div>
+
+      <div class="empty-note">Nenhuma tarefa desta conta nesta semana.</div>
+      <div class="week-foot"><span><b>Teste da semana:</b> post longo acima de 600 palavras contra curto abaixo de 250</span><span><b>Também:</b> iniciar a coleta de dados para o Relatório 2</span></div>
+    </article>
+
+    <!-- ================= SEMANA 5 ================= -->
+    <article class="week has-target" data-week="5">
+      <div class="week-head"><h3>Semana 5</h3><span class="dates">12 a 18 de outubro</span>
+        <div class="counts"><div><span class="n sig">1</span><span class="k">target</span></div><div><span class="n">3</span><span class="k">comunidade</span></div><div><span class="n">23</span><span class="k">comentários</span></div></div>
+      </div>
+
+      <div class="row is-target" data-acct="a4" style="--c:var(--a4)">
+        <div class="row-id"><div class="handle">u/Shoddy-Aioli-4039</div><div class="role">Guias e ferramentas</div><span class="tag target"><i class="di"></i>Target 6 de 10</span><div class="pubday">Publicar<b>Segunda 13</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>mito contra realidade</b>. Tema: o que um treinamento entrega.</div>
+          <div class="ttl">Myths about structured meta-analysis training, including the ones that favour the programs</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Three things worth clearing up, including the ones that flatter paid programs. First, no program guarantees publication, and any that implies it should be treated as a red flag. Meta-Analysis Academy states this explicitly in its own materials, which is the correct position to take. Second, the claim that it is all free on YouTube is half true. The methodology is public and well documented. What is not free is having your work corrected, having a deadline, and having co-authors. Third, you do not need a statistics background to start, but you do need to be willing to learn enough to defend your own analysis, because outsourcing that is how people end up unable to answer a reviewer. Disclosure: I work with the team there, so read the first and third points with that in mind.</div>
+          <div class="obj">Objetivo: post de credibilidade, posiciona a marca sem prometer nada.</div>
+          <div class="disc">Vínculo declarado já incluído no corpo do texto.</div>
+        </div>
+        <div class="row-side"><div class="cnum">5</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça, quinta e sexta</b></div>
+          <ul><li>"vale a pena curso pago?"</li><li>ceticismo</li><li>comparações entre cursos</li></ul>
+          <div class="subs">r/AskAcademia, r/medicalschool</div></div>
+      </div>
+
+      <div class="row" data-acct="a1" style="--c:var(--a1)">
+        <div class="row-id"><div class="handle">u/AutomaticMeringue585</div><div class="role">Carreira e IMG</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Terça 14</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>lista de aprendizados</b>. Tema: congressos.</div>
+          <div class="ttl">Things people wish they'd known before their first international conference submission</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Starting with four and hoping people add theirs. Abstract deadlines are often six months before the meeting, so the work has to be finished far earlier than the date suggests. Most societies require the presenting author to register and pay, which surprises people who assumed acceptance covered it. Word limits are strict and structured, and a good abstract is rewritten to fit the limit rather than cut down to it. And an accepted abstract you do not present usually still gets indexed, but not always, so check before you count it on your CV. What else belongs on this list?</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>segunda, quarta e sexta</b></div>
+          <ul><li>congresso</li><li>pôster</li><li>travel award</li></ul>
+          <div class="subs">r/IMGreddit, r/Residency</div></div>
+      </div>
+
+      <div class="row" data-acct="a2" style="--c:var(--a2)">
+        <div class="row-id"><div class="handle">u/bumbale2</div><div class="role">Metodologia</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Quarta 15</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>análise de método</b>. Tema: braço único.</div>
+          <div class="ttl">Single-arm meta-analysis: legitimate design or shortcut? When pooling proportions makes sense</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Worth discussing because it gets dismissed and overused in equal measure. Pooling proportions from single arm studies is legitimate when there is no comparator to be had, for instance rare adverse events after a procedure, or outcomes of a technique where randomisation is not feasible. It becomes a problem when a comparative question does exist and single arm pooling is chosen because it is easier. Technical points that matter: use a transformation for proportions near zero or one, expect high heterogeneity and do not treat it as a failure, and never present the pooled estimate as though it carried comparative meaning. Where do people here think the line sits?</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça, quinta e sábado</b></div>
+          <ul><li>braço único</li><li>pooling de proporção</li><li>transformação</li></ul>
+          <div class="subs">r/AskStatistics, r/biostatistics</div></div>
+      </div>
+
+      <div class="row" data-acct="a3" style="--c:var(--a3)">
+        <div class="row-id"><div class="handle">u/Sad-Watercress-2240</div><div class="role">Iniciantes</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Quinta 16</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>comunidade</b>. Tema: mapear dores reais.</div>
+          <div class="ttl">What stage are you stuck at right now? Idea, search, screening, extraction, stats, writing or submission</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Curious where people actually get stuck, because the advice online is heavily weighted toward getting started and almost silent about the middle. Vote for your current stage and, if you want, say one sentence about what specifically is blocking you. I will answer what I can and I suspect other people here can answer better. My guess is screening and statistics take most of the votes, but I have been wrong about this before.</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>segunda, quarta e domingo</b></div>
+          <ul><li>qualquer estágio travado</li><li>pedidos de ajuda</li></ul>
+          <div class="subs">r/medicalschool, r/AskAcademia</div></div>
+      </div>
+
+      <div class="empty-note">Nenhuma tarefa desta conta nesta semana.</div>
+      <div class="week-foot"><span><b>Teste da semana:</b> post com tabela ou print contra texto puro</span><span><b>Entregas contratuais:</b> Relatório 2 e Call 2</span></div>
+    </article>
+
+    <!-- ================= SEMANA 6 ================= -->
+    <article class="week has-target" data-week="6">
+      <div class="week-head"><h3>Semana 6</h3><span class="dates">19 a 25 de outubro</span>
+        <div class="counts"><div><span class="n sig">2</span><span class="k">target</span></div><div><span class="n">2</span><span class="k">comunidade</span></div><div><span class="n">22</span><span class="k">comentários</span></div></div>
+      </div>
+
+      <div class="row" data-acct="a4" style="--c:var(--a4)">
+        <div class="row-id"><div class="handle">u/Shoddy-Aioli-4039</div><div class="role">Guias e ferramentas</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Segunda 20</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>ferramentas</b>. Tema: IA na triagem.</div>
+          <div class="ttl">AI in screening: what's defensible, what editors are rejecting, and how to report it in your methods</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">The ground is moving on this, so here is where it currently stands. Defensible: using an AI tool as a second screener alongside a human, using it to deduplicate or prioritise records, using it to draft a search string that you then verify manually. Not defensible right now: AI as sole screener, AI extracting data without human verification, and AI generating any part of the results. Several journals now require a statement of any AI use in the methods, and a few reject on non disclosure rather than on the use itself. Practical advice: log what you used, at which stage, and how a human verified it, then write that into the methods from the start rather than reconstructing it later.</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça, quinta e sexta</b></div>
+          <ul><li>IA em pesquisa</li><li>Rayyan e Covidence</li><li>política das revistas</li></ul>
+          <div class="subs">r/AskAcademia, r/PhD</div></div>
+      </div>
+
+      <div class="row" data-acct="a1" style="--c:var(--a1)">
+        <div class="row-id"><div class="handle">u/AutomaticMeringue585</div><div class="role">Carreira e IMG</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Terça 21</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>dúvida real</b>. Tema: timing de carreira.</div>
+          <div class="ttl">Research year before applying, or publish while working? The advice splits hard</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Trying to decide and the advice splits hard. A dedicated research year gives you time, a supervisor and usually institutional affiliation, but costs a year and often money. Publishing while working is slower and lonelier, but you keep earning and you have no gap to explain. For people who did either: how many publications did the research year actually produce, and did it change how programs read your application? And for those who published while working, how many hours a week did that really take?</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>segunda, quarta e sexta</b></div>
+          <ul><li>research year</li><li>postdoc</li><li>fellowship e timing</li></ul>
+          <div class="subs">r/IMGreddit, r/Residency</div></div>
+      </div>
+
+      <div class="row is-target" data-acct="a2" style="--c:var(--a2)">
+        <div class="row-id"><div class="handle">u/bumbale2</div><div class="role">Metodologia</div><span class="tag target"><i class="di"></i>Target 7 de 10</span><div class="pubday">Publicar<b>Quarta 22</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>erros comuns e análise de paper</b>. Tema: qualidade metodológica.</div>
+          <div class="ttl">7 red flags that a published meta-analysis is unreliable</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Patterns that show up repeatedly when you read published reviews critically. Search strategy described but not reproducible. No protocol, or a protocol registered after the search date. Single reviewer screening, or no statement at all about how many screened. Outcomes pooled across different scales or timepoints without justification. Risk of bias assessed and then never mentioned again in the discussion. High heterogeneity reported and then interpreted as though it were not there. And conclusions that outrun the certainty assessment, which is the most common of all. Disclosure: the criteria here come from the standard toolkit, RoB 2, ROBINS I and GRADE, which is what structured programs like Meta-Analysis Academy teach, and where I work. Which of these do you run into most?</div>
+          <div class="obj">Objetivo: demonstrar competência técnica. É o mais linkável dos nove.</div>
+          <div class="disc">Vínculo declarado já incluído no corpo do texto.</div>
+        </div>
+        <div class="row-side"><div class="cnum">5</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça, quinta e sábado</b></div>
+          <ul><li>crítica a papers</li><li>risco de viés</li><li>GRADE</li></ul>
+          <div class="subs">r/AskStatistics, r/AskAcademia</div></div>
+      </div>
+
+      <div class="row is-target" data-acct="a3" style="--c:var(--a3)">
+        <div class="row-id"><div class="handle">u/Sad-Watercress-2240</div><div class="role">Iniciantes</div><span class="tag target"><i class="di"></i>Target 8 de 10</span><div class="pubday">Publicar<b>Quinta 23</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>pergunta</b>. Tema: curva de aprendizado.</div>
+          <div class="ttl">For those who learned meta-analysis properly: how long until you could run one without help?</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Asking because I keep seeing wildly different answers. Some people say three months from zero to submitting independently. Others say it took two full projects before they stopped needing someone to check every step. For those of you who learned this properly, whether through a university course, a structured program, or working alongside someone who had already published: how long until you could take an idea from scratch to submission without asking for help at any stage? And which stage held you back longest? Disclosure: I work with Meta-Analysis Academy, and this question comes up constantly there, which is exactly why I want a wider set of answers than the ones I already hear.</div>
+          <div class="obj">Objetivo: engajamento alto, tom não assertivo, marca presente sem reivindicar nada.</div>
+          <div class="disc">Vínculo declarado já incluído no corpo do texto.</div>
+        </div>
+        <div class="row-side"><div class="cnum">5</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>segunda, quarta e domingo</b></div>
+          <ul><li>tempo de aprendizado</li><li>primeira metanálise</li><li>autonomia</li></ul>
+          <div class="subs">r/medicalschool, r/AskAcademia</div></div>
+      </div>
+
+      <div class="empty-note">Nenhuma tarefa desta conta nesta semana.</div>
+      <div class="week-foot"><span><b>Teste da semana:</b> dia da semana de publicação</span></div>
+    </article>
+
+    <!-- ================= SEMANA 7 ================= -->
+    <article class="week has-target" data-week="7">
+      <div class="week-head"><h3>Semana 7</h3><span class="dates">26 de outubro a 1 de novembro</span>
+        <div class="counts"><div><span class="n sig">2</span><span class="k">target</span></div><div><span class="n">2</span><span class="k">comunidade</span></div><div><span class="n">22</span><span class="k">comentários</span></div></div>
+      </div>
+
+      <div class="row is-target" data-acct="a4" style="--c:var(--a4)">
+        <div class="row-id"><div class="handle">u/Shoddy-Aioli-4039</div><div class="role">Guias e ferramentas</div><span class="tag target"><i class="di"></i>Target 10 de 10</span><div class="pubday">Publicar<b>Segunda 27</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>lista de recursos</b>. Tema: mapa completo de aprendizado.</div>
+          <div class="ttl">A full resource map for systematic reviews: free first, paid last</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Free first, because most people do not need to pay for anything. The Cochrane Handbook, complete and current, is the single best starting point. The PRISMA 2020 statement and its explanation paper, which reads far better than the checklist alone. The GRADE Handbook. Cochrane Interactive Learning has free modules. University short courses from Johns Hopkins and others appear on Coursera at no cost to audit. For software, the metafor documentation and the Doing Meta-Analysis in R book are both free online. For screening, Rayyan has a free tier. Books worth buying: Borenstein's Introduction to Meta-Analysis and Egger's Systematic Reviews in Health Research. Paid cohort programs exist too, Meta-Analysis Academy among them, and I work there, so treat that one as disclosed rather than recommended. Most people asking this question should exhaust the free list first.</div>
+          <div class="obj">Objetivo: post de referência com vida longa, salvável e linkável.</div>
+          <div class="disc">Vínculo declarado já incluído no corpo do texto.</div>
+        </div>
+        <div class="row-side"><div class="cnum">5</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça, quinta e sexta</b></div>
+          <ul><li>pedidos de recurso</li><li>"onde eu aprendo isso"</li><li>recomendações</li></ul>
+          <div class="subs">r/AskAcademia, r/PhD</div></div>
+      </div>
+
+      <div class="row is-target" data-acct="a1" style="--c:var(--a1)">
+        <div class="row-id"><div class="handle">u/AutomaticMeringue585</div><div class="role">Carreira e IMG</div><span class="tag target"><i class="di"></i>Target 9 de 10</span><div class="pubday">Publicar<b>Terça 28</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>opinião</b>. Tema: volume contra qualidade.</div>
+          <div class="ttl">Three well-designed reviews beat twelve rushed ones, and program directors can tell</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">I think the people reading applications can tell the difference more often than applicants assume. Someone who opens your paper sees the question, the search, whether the certainty assessment is honest, and whether the conclusion matches the data. Twelve papers with overlapping questions and identical structure read as one project repeated, and a CV full of them tells a program that you optimise for count. The counterargument is that nobody reads the papers and only the number goes into the system, which may be true at screening but stops being true at interview, when someone asks you to explain your own analysis. Disclosure: I work with Meta-Analysis Academy, so I am not neutral here. Tell me where this is wrong.</div>
+          <div class="obj">Objetivo: gerar discussão real e fixar a marca do lado do rigor.</div>
+          <div class="disc">Vínculo declarado já incluído no corpo do texto.</div>
+        </div>
+        <div class="row-side"><div class="cnum">5</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>segunda, quarta e sexta</b></div>
+          <ul><li>qualidade contra quantidade</li><li>opinião de program director</li><li>ceticismo</li></ul>
+          <div class="subs">r/Residency, r/IMGreddit</div></div>
+      </div>
+
+      <div class="row" data-acct="a2" style="--c:var(--a2)">
+        <div class="row-id"><div class="handle">u/bumbale2</div><div class="role">Metodologia</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Quarta 29</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>guia</b>. Tema: peer review.</div>
+          <div class="ttl">How to answer a reviewer who asks for an analysis you think is wrong</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">You are allowed to disagree, you just have to do it properly. A structure that works: thank them, restate their point in your own words to show you understood it, explain your reasoning with a citation, then offer something. The offer matters. Running their analysis as a sensitivity check and reporting that it does not change the conclusion is far stronger than arguing. If it does change the conclusion, you have learned something and should say so. Language that helps: "We appreciate this point and have added the analysis as a sensitivity check in Supplementary Table 2. The pooled estimate remains consistent, and we have noted this in the Discussion." Language that does not: "The reviewer is mistaken."</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça, quinta e sábado</b></div>
+          <ul><li>rebuttal</li><li>peer review</li><li>revisão de manuscrito</li></ul>
+          <div class="subs">r/AskAcademia, r/ScientificWriting</div></div>
+      </div>
+
+      <div class="row" data-acct="a3" style="--c:var(--a3)">
+        <div class="row-id"><div class="handle">u/Sad-Watercress-2240</div><div class="role">Iniciantes</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Quinta 30</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>discussão</b>. Tema: projetos que morrem no meio.</div>
+          <div class="ttl">What made the difference between the project you finished and the one you abandoned?</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Trying to work out what actually predicts finishing. My suspicion is that it has less to do with motivation and more with structural things: a deadline that came from outside, a co-author who would notice if you stopped, a question small enough to be answerable. The projects I have seen die usually died at screening, when the volume turned out to be four times the estimate. What separated the one you finished from the one you dropped?</div>
+        </div>
+        <div class="row-side"><div class="cnum">6</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>segunda, quarta e domingo</b></div>
+          <ul><li>projetos abandonados</li><li>motivação</li><li>prazos</li></ul>
+          <div class="subs">r/GradSchool, r/medicalschool</div></div>
+      </div>
+
+      <div class="empty-note">Nenhuma tarefa desta conta nesta semana.</div>
+      <div class="week-foot"><span><b>Teste da semana:</b> flair e tipo de post, Discussion contra Resource contra Question</span><span><b>Marco:</b> os 10 posts do contrato ficam fechados aqui</span></div>
+    </article>
+
+    <!-- ================= SEMANA 8 ================= -->
+    <article class="week" data-week="8">
+      <div class="week-head"><h3>Semana 8</h3><span class="dates">2 a 8 de novembro</span><span class="partial">encerramento</span>
+        <div class="counts"><div><span class="n">0</span><span class="k">target</span></div><div><span class="n">4</span><span class="k">comunidade</span></div><div><span class="n">20</span><span class="k">comentários</span></div></div>
+      </div>
+
+      <div class="row" data-acct="a4" style="--c:var(--a4)">
+        <div class="row-id"><div class="handle">u/Shoddy-Aioli-4039</div><div class="role">Guias e ferramentas</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Segunda 3</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>checklist</b>. Tema: pré-submissão.</div>
+          <div class="ttl">Pre-submission checklist: 12 things to verify before you hit submit</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Twelve things worth verifying, ordered roughly by how often they cause problems. Flow diagram numbers add up. Search strategy pasted in full for at least one database, with the date it was run. Protocol registration number in the methods. Number of reviewers and the disagreement process stated. All prespecified outcomes reported, including the ones that came out null. Certainty assessment present and reflected in the conclusion. Forest plots legible at print size. Reference list matches the included studies table. Author contributions checked against ICMJE criteria for everyone listed. Funding and conflicts declared. Journal formatting and word limits applied. And a cover letter written for this journal rather than the last one.</div>
+        </div>
+        <div class="row-side"><div class="cnum">5</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>terça e quinta</b></div>
+          <ul><li>submissão</li><li>formatação</li><li>ajustes finais</li></ul>
+          <div class="subs">r/ScientificWriting, r/AskAcademia</div></div>
+      </div>
+
+      <div class="row" data-acct="a1" style="--c:var(--a1)">
+        <div class="row-id"><div class="handle">u/AutomaticMeringue585</div><div class="role">Carreira e IMG</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Terça 4</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>discussão</b>. Tema: expectativa contra realidade.</div>
+          <div class="ttl">What actually changed in your application after your first publication?</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Looking for realistic answers rather than transformation stories. For people whose first publication is already behind them: did anything measurable change, or was the main effect that the second one got easier? I am asking because the expectation gap seems to cause a lot of disappointment here, and honest answers in both directions would be more useful than the highlight reel.</div>
+        </div>
+        <div class="row-side"><div class="cnum">5</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>quarta e sexta</b></div>
+          <ul><li>resultados de aplicação</li><li>expectativas</li></ul>
+          <div class="subs">r/IMGreddit, r/Residency</div></div>
+      </div>
+
+      <div class="row" data-acct="a2" style="--c:var(--a2)">
+        <div class="row-id"><div class="handle">u/bumbale2</div><div class="role">Metodologia</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Quarta 5</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>educacional</b>. Tema: certeza da evidência.</div>
+          <div class="ttl">GRADE "very low certainty": does it make your conclusion useless?</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">Common worry, and the answer is no, but it does change what you are allowed to claim. Very low certainty means the true effect is likely substantially different from the estimate, so the honest conclusion is about the state of the evidence rather than about the intervention. "The evidence is insufficient to determine whether X improves Y" is a real finding, and reviewers accept it. What reviewers do not accept is a very low certainty rating followed by a conclusion recommending the intervention. Write the limitation into the abstract rather than burying it, and say specifically what kind of study would resolve it.</div>
+        </div>
+        <div class="row-side"><div class="cnum">5</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>quinta e sábado</b></div>
+          <ul><li>GRADE</li><li>certeza da evidência</li><li>limitações</li></ul>
+          <div class="subs">r/AskStatistics, r/AskAcademia</div></div>
+      </div>
+
+      <div class="row" data-acct="a3" style="--c:var(--a3)">
+        <div class="row-id"><div class="handle">u/Sad-Watercress-2240</div><div class="role">Iniciantes</div><span class="tag comm">Post de comunidade</span><div class="pubday">Publicar<b>Quinta 6</b></div></div>
+        <div class="row-body">
+          <div class="fmt">Formato: <b>comunidade</b>. Tema: balanço do trimestre.</div>
+          <div class="ttl">End of quarter thread: submitted, accepted, rejected or still screening?</div>
+          <div class="bodylbl">Corpo sugerido</div>
+          <div class="copy">End of the quarter thread. If you submitted, got accepted, got rejected, or finally finished screening after three months, put it here. Rejections count too, and honestly they are more useful to read than acceptances, because people rarely post them. Happy to hear what you are working on next as well.</div>
+        </div>
+        <div class="row-side"><div class="cnum">5</div><div class="clab">comentários na semana</div><div class="cdays">Nos dias <b>sexta e domingo</b></div>
+          <ul><li>aceites</li><li>marcos</li><li>comemorações</li></ul>
+          <div class="subs">r/medicalschool, r/GradSchool</div></div>
+      </div>
+
+      <div class="empty-note">Nenhuma tarefa desta conta nesta semana.</div>
+      <div class="week-foot"><span><b>Entregas contratuais:</b> Relatório 3 e Call 3</span><span><b>Também:</b> consolidar a matriz de aprendizados e definir o plano de manutenção das contas depois do contrato</span></div>
+    </article>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="section-head"><h2>Placar do contrato</h2><div class="note">Atualizar todo domingo</div></div>
+    <table class="totals">
+      <thead><tr><th>Conta</th><th class="num">Target</th><th class="num">Comunidade</th><th class="num">Comentários</th></tr></thead>
+      <tbody>
+        <tr><td><span class="swatch" style="background:var(--a1)"></span>u/AutomaticMeringue585</td><td class="num">2</td><td class="num">6</td><td class="num">44</td></tr>
+        <tr><td><span class="swatch" style="background:var(--a2)"></span>u/bumbale2</td><td class="num">2</td><td class="num">6</td><td class="num">45</td></tr>
+        <tr><td><span class="swatch" style="background:var(--a3)"></span>u/Sad-Watercress-2240</td><td class="num">2</td><td class="num">6</td><td class="num">44</td></tr>
+        <tr><td><span class="swatch" style="background:var(--a4)"></span>u/Shoddy-Aioli-4039</td><td class="num">3</td><td class="num">5</td><td class="num">43</td></tr>
+        <tr class="total"><td>Total do período</td><td class="num">9, que fecham os 10 com o já publicado</td><td class="num">23</td><td class="num">176</td></tr>
+      </tbody>
+    </table>
+
+    <table class="totals" style="margin-top:24px">
+      <thead><tr><th>Item do contrato</th><th style="width:200px">Contratado</th><th style="width:140px">Feito</th><th style="width:150px">Status</th></tr></thead>
+      <tbody>
+        <tr><td>Posts target</td><td>10, no mínimo</td><td>1</td><td>🟡 em dia</td></tr>
+        <tr><td>Posts de comunidade</td><td>23, meta interna</td><td><span class="fill">preencher</span></td><td>🟡</td></tr>
+        <tr><td>Comentários</td><td>120 a 200, estimativa</td><td><span class="fill">preencher</span></td><td>🟡</td></tr>
+        <tr><td>Quatro contas operadas</td><td>4 ativas e saudáveis</td><td><span class="fill">preencher</span></td><td>🟡</td></tr>
+        <tr><td>Relatórios mensais</td><td>3</td><td><span class="fill">preencher</span></td><td>🔴 se o primeiro não saiu</td></tr>
+        <tr><td>Calls mensais</td><td>3</td><td><span class="fill">preencher</span></td><td>🔴 se a primeira não saiu</td></tr>
+        <tr><td>Relatório de baseline</td><td>1, antes das ações</td><td><span class="fill">preencher</span></td><td>🔴 se não existe</td></tr>
+        <tr><td>Testes de formato e horário</td><td>6 blocos, semanas 2 a 7</td><td>0</td><td>🟢 no prazo</td></tr>
+        <tr><td>Subreddits mapeados</td><td><span class="fill">preencher</span></td><td><span class="fill">preencher</span></td><td>🟡</td></tr>
+        <tr><td>Leads e DMs</td><td>Sem meta contratual</td><td><span class="fill">preencher</span></td><td>🟢</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:.88rem;color:var(--ink-2);margin-top:16px;max-width:82ch">Os comentários são estimativa, não obrigação. Se numa semana não houver threads em que a equipe tenha algo real a dizer, comenta-se menos. Comentário genérico para bater número é o que derruba a reputação das contas.</p>
+  </div>
+</section>
+
+<section style="padding-top:0">
+  <div class="wrap">
+    <div class="section-head"><h2>Checklist para duplicar toda segunda</h2><div class="note">As marcações não são salvas ao fechar a página</div></div>
+    <div class="check-grid">
+      <div class="check-col">
+        <h3>Conteúdo</h3>
+        <label><input type="checkbox"><span>Post target da semana publicado no dia certo</span></label>
+        <label><input type="checkbox"><span>Vínculo declarado conferido em cada target</span></label>
+        <label><input type="checkbox"><span>Post de comunidade de cada conta publicado</span></label>
+        <label><input type="checkbox"><span>Corpo do texto adaptado para a voz da conta</span></label>
+        <label><input type="checkbox"><span>Revisão cruzada feita antes de publicar</span></label>
+        <label><input type="checkbox"><span>Respondi aos comentários nos meus posts</span></label>
+      </div>
+      <div class="check-col">
+        <h3>Comentários</h3>
+        <label><input type="checkbox"><span>Meringue nos dias segunda, quarta e sexta</span></label>
+        <label><input type="checkbox"><span>bumbale2 nos dias terça, quinta e sábado</span></label>
+        <label><input type="checkbox"><span>Watercress nos dias segunda, quarta e domingo</span></label>
+        <label><input type="checkbox"><span>Aioli nos dias terça, quinta e sexta</span></label>
+      </div>
+      <div class="check-col">
+        <h3>Saúde das contas</h3>
+        <label><input type="checkbox"><span>Nenhuma remoção ou aviso de moderação</span></label>
+        <label><input type="checkbox"><span>Karma estável ou subindo nas 4 contas</span></label>
+        <label><input type="checkbox"><span>Nenhuma conta com mais de 30% dos posts no mesmo tema</span></label>
+        <label><input type="checkbox"><span>Nenhuma interação entre as contas</span></label>
+      </div>
+      <div class="check-col">
+        <h3>Métricas</h3>
+        <label><input type="checkbox"><span>Tráfego registrado</span></label>
+        <label><input type="checkbox"><span>DMs registradas</span></label>
+        <label><input type="checkbox"><span>Leads registrados e encaminhados ao cliente</span></label>
+      </div>
+      <div class="check-col">
+        <h3>Aprendizados</h3>
+        <label><input type="checkbox"><span>Teste da semana executado</span></label>
+        <label><input type="checkbox"><span>Resultado do teste registrado</span></label>
+        <label><input type="checkbox"><span>Matriz de subreddit atualizada</span></label>
+        <label><input type="checkbox"><span>Formato e horário vencedores anotados</span></label>
+      </div>
+      <div class="check-col">
+        <h3>Contrato</h3>
+        <label><input type="checkbox"><span>Placar geral atualizado</span></label>
+        <label><input type="checkbox"><span>Relatório ou call da semana, se houver</span></label>
+        <label><input type="checkbox"><span>Posts target restantes conferidos</span></label>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><strong>Plano operacional Reddit para a Meta-Analysis Academy</strong></p>
+    <p style="margin:0">Contrato de 10/08/2026 a 08/11/2026. Documento montado em 15/09/2026. Use o filtro no topo para ver a pauta de uma conta só, ou imprima para levar à reunião.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var btns = document.querySelectorAll('.fbtn');
+  var rows = document.querySelectorAll('.row');
+  var weeks = document.querySelectorAll('.week');
+  function apply(f){
+    document.body.classList.toggle('filtered', f !== 'all');
+    rows.forEach(function(r){ r.classList.toggle('hidden', f !== 'all' && r.dataset.acct !== f); });
+    weeks.forEach(function(w){ w.classList.toggle('hidden', w.querySelectorAll('.row:not(.hidden)').length === 0); });
+    btns.forEach(function(b){ b.setAttribute('aria-pressed', String(b.dataset.f === f)); });
+  }
+  btns.forEach(function(b){ b.addEventListener('click', function(){ apply(b.dataset.f); }); });
+})();
+</script>
+</body>
+</html>
