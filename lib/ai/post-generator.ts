@@ -72,10 +72,15 @@ Reply ONLY with valid JSON, no extra text, no markdown fences: {"theme":"...","t
  * `post_generations` (mirrors generateReply's pattern of owning both the AI
  * call and the write). Generic mode picks from a fixed subreddit list and
  * skips guardrails entirely; company mode picks from the company's suggested
- * subreddits and layers in guardrails.
+ * subreddits and layers in guardrails. Generic mode's `subreddit` lets the
+ * caller pin the choice (the picker on /generic-post-generator) instead of
+ * drawing at random — it still has to be one of the configured ones, since
+ * that list is the only thing authorizing it.
  */
 export async function generatePostGeneration(
-  opts: { mode: "generic"; createdBy: string } | { mode: "company"; companyId: string; createdBy: string },
+  opts:
+    | { mode: "generic"; createdBy: string; subreddit?: string }
+    | { mode: "company"; companyId: string; createdBy: string },
 ): Promise<GeneratedPostGeneration> {
   const admin = createAdminClient();
 
@@ -113,7 +118,14 @@ export async function generatePostGeneration(
       throw new Error("No subreddits configured for the generic post generator yet");
     }
 
-    subreddit = genericSettings.subreddits[Math.floor(Math.random() * genericSettings.subreddits.length)];
+    if (opts.subreddit) {
+      if (!genericSettings.subreddits.includes(opts.subreddit)) {
+        throw new Error("Chosen subreddit is not in the configured list");
+      }
+      subreddit = opts.subreddit;
+    } else {
+      subreddit = genericSettings.subreddits[Math.floor(Math.random() * genericSettings.subreddits.length)];
+    }
   }
 
   const nonce = Math.random().toString(36).slice(2, 10);

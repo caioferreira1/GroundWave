@@ -20,12 +20,15 @@ import type { PostGenerationActions, PostGenerationRow } from "./types";
  */
 export function GenerationPanel({
   action,
+  subreddits,
   posts,
   deleteAction,
   actions,
   emptyState,
 }: {
-  action: () => Promise<{ id: string }>;
+  action: (subreddit?: string) => Promise<{ id: string }>;
+  /** Present only on the generic generator, where the subreddit is picked from a dropdown instead of drawn at random server-side. */
+  subreddits?: string[];
   posts: PostGenerationRow[];
   deleteAction: (id: string) => Promise<void>;
   actions?: PostGenerationActions;
@@ -34,10 +37,10 @@ export function GenerationPanel({
   const [isPending, startTransition] = useTransition();
   const [justGeneratedId, setJustGeneratedId] = useState<string | null>(null);
 
-  function handleGenerate() {
+  function handleGenerate(subreddit?: string) {
     startTransition(async () => {
       try {
-        const result = await action();
+        const result = await action(subreddit);
         setJustGeneratedId(result.id);
         toast.success("Post generated!");
       } catch (err) {
@@ -48,7 +51,12 @@ export function GenerationPanel({
 
   return (
     <div className="space-y-6">
-      <GenerateButton onClick={handleGenerate} pending={isPending} hasFeatured={posts.length > 0} />
+      <GenerateButton
+        subreddits={subreddits}
+        onSelect={handleGenerate}
+        pending={isPending}
+        hasFeatured={posts.length > 0}
+      />
       {isPending ? (
         <GeneratingCard />
       ) : posts.length > 0 ? (

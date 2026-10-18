@@ -5,10 +5,10 @@ import { requireStaff } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { generatePostGeneration } from "@/lib/ai/post-generator";
 
-export async function generatePost() {
+export async function generatePost(subreddit?: string) {
   const { user } = await requireStaff();
 
-  const generation = await generatePostGeneration({ mode: "generic", createdBy: user.id });
+  const generation = await generatePostGeneration({ mode: "generic", createdBy: user.id, subreddit });
 
   revalidatePath("/generic-post-generator");
 

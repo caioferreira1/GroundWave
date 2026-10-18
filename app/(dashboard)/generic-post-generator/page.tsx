@@ -96,7 +96,7 @@ export default async function GenericPostGeneratorPage() {
     <div className="space-y-6">
       <PageHeading
         title="Post Generator"
-        description="Generate authentic Reddit posts with AI. Each one picks a random subreddit and theme, no company targeting."
+        description="Generate authentic Reddit posts with AI. Pick the subreddit, the AI picks the theme, no company targeting."
       />
 
       {isStaff ? (
@@ -117,6 +117,7 @@ export default async function GenericPostGeneratorPage() {
       {isStaff ? (
         <GenerationPanel
           action={generatePost}
+          subreddits={genericSettings?.subreddits ?? []}
           posts={posts}
           deleteAction={deletePostGeneration}
           actions={postGenerationActions}
