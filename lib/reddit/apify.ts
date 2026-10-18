@@ -22,6 +22,14 @@ import "server-only";
 const APIFY_BASE = "https://api.apify.com/v2";
 // No path da REST API o ID do actor usa "~" no lugar da "/".
 const ACTOR_ID = "harshmaur~reddit-scraper";
+// Builds a partir de 0.0.643 (15/10/2026) passaram a ignorar o `t=` das
+// startUrls e o `maxPostsCount`, devolvendo ~850 posts de qualquer idade por
+// run (~10x o custo). Fixamos o último build confirmado bom; só suba esta
+// versão depois de validar uma run manual do build novo.
+const ACTOR_BUILD = process.env.APIFY_ACTOR_BUILD || "0.0.615";
+// Teto de gasto por run (actor é pay-per-result): Apify interrompe a run ao
+// atingir esse valor. Runs normais custam ~US$0,10–0,20.
+const MAX_CHARGE_PER_RUN_USD = Number(process.env.APIFY_MAX_CHARGE_USD) || 0.2;
 const DATASET_FIELDS =
   "id,title,body,authorName,communityName,createdAt,upVotes,commentsCount,flair,postUrl,dataType";
 
@@ -176,8 +184,14 @@ export async function startRedditRun(
   };
 
   const webhooks = buildWebhooksParam(webhookUrl);
+  const params = new URLSearchParams({
+    token,
+    webhooks,
+    build: ACTOR_BUILD,
+    maxTotalChargeUsd: String(MAX_CHARGE_PER_RUN_USD),
+  });
   const startRes = await fetch(
-    `${APIFY_BASE}/acts/${ACTOR_ID}/runs?token=${encodeURIComponent(token)}&webhooks=${encodeURIComponent(webhooks)}`,
+    `${APIFY_BASE}/acts/${ACTOR_ID}/runs?${params}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
