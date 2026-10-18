@@ -29,7 +29,7 @@ const ACTOR_ID = "harshmaur~reddit-scraper";
 const ACTOR_BUILD = process.env.APIFY_ACTOR_BUILD || "0.0.615";
 // Teto de gasto por run (actor é pay-per-result): Apify interrompe a run ao
 // atingir esse valor. Runs normais custam ~US$0,10–0,20.
-const MAX_CHARGE_PER_RUN_USD = Number(process.env.APIFY_MAX_CHARGE_USD) || 0.2;
+const MAX_CHARGE_PER_RUN_USD = Number(process.env.APIFY_MAX_CHARGE_USD) || 0.3;
 const DATASET_FIELDS =
   "id,title,body,authorName,communityName,createdAt,upVotes,commentsCount,flair,postUrl,dataType";
 
