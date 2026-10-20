@@ -24,9 +24,11 @@ const APIFY_BASE = "https://api.apify.com/v2";
 const ACTOR_ID = "harshmaur~reddit-scraper";
 // Builds a partir de 0.0.643 (15/10/2026) passaram a ignorar o `t=` das
 // startUrls e o `maxPostsCount`, devolvendo ~850 posts de qualquer idade por
-// run (~10x o custo). Fixamos o último build confirmado bom; só suba esta
-// versão depois de validar uma run manual do build novo.
-const ACTOR_BUILD = process.env.APIFY_ACTOR_BUILD || "0.0.615";
+// run (~10x o custo). Em 20/10/2026 o 0.0.615 passou a voltar 0 posts
+// ("Coverage ladder exhausted") e o 0.0.676 já respeita `t=` e
+// `maxPostsCount` de novo (validado com run manual). Só suba esta versão
+// depois de validar uma run manual do build novo.
+const ACTOR_BUILD = process.env.APIFY_ACTOR_BUILD || "0.0.676";
 // Teto de gasto por run (actor é pay-per-result): Apify interrompe a run ao
 // atingir esse valor. Runs normais custam ~US$0,10–0,20.
 const MAX_CHARGE_PER_RUN_USD = Number(process.env.APIFY_MAX_CHARGE_USD) || 0.3;
