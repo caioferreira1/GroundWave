@@ -28,7 +28,14 @@ const ACTOR_ID = "harshmaur~reddit-scraper";
 // ("Coverage ladder exhausted"), então seguimos no 0.0.676 — que AINDA
 // ignora `t=` e o `searchTime` nativo. A janela vai pelo input
 // `postedAfter` (ver startRedditRun), que ele respeita.
+// O autor do actor publica vários builds por dia e o Apify só guarda os ~40
+// mais recentes: o 0.0.676 foi apagado em 31/10/2026 e todo start passou a
+// voltar 403 build-not-found por 12 dias. Por isso o build fixado é só uma
+// preferência — se ele sumir, startRedditRun cai para a tag `latest`
+// (FALLBACK_BUILD). O `postedAfter` + `maxTotalChargeUsd` continuam limitando
+// idade dos posts e custo mesmo num build novo.
 const ACTOR_BUILD = process.env.APIFY_ACTOR_BUILD || "0.0.676";
+const FALLBACK_BUILD = "latest";
 // Teto de gasto por run (actor é pay-per-result): Apify interrompe a run ao
 // atingir esse valor. Runs normais custam ~US$0,10–0,20.
 const MAX_CHARGE_PER_RUN_USD = Number(process.env.APIFY_MAX_CHARGE_USD) || 0.3;
@@ -190,21 +197,33 @@ export async function startRedditRun(
   };
 
   const webhooks = buildWebhooksParam(webhookUrl);
-  const params = new URLSearchParams({
-    token,
-    webhooks,
-    build: ACTOR_BUILD,
-    maxTotalChargeUsd: String(MAX_CHARGE_PER_RUN_USD),
-  });
-  const startRes = await fetch(
-    `${APIFY_BASE}/acts/${ACTOR_ID}/runs?${params}`,
-    {
+  const startWithBuild = (build: string) => {
+    const params = new URLSearchParams({
+      token,
+      webhooks,
+      build,
+      maxTotalChargeUsd: String(MAX_CHARGE_PER_RUN_USD),
+    });
+    return fetch(`${APIFY_BASE}/acts/${ACTOR_ID}/runs?${params}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
       signal: AbortSignal.timeout(30_000),
-    },
-  );
+    });
+  };
+
+  let startRes = await startWithBuild(ACTOR_BUILD);
+  if (!startRes.ok && ACTOR_BUILD !== FALLBACK_BUILD) {
+    const detail = await startRes.text().catch(() => "");
+    if (!detail.includes("build-not-found")) {
+      throw new Error(`Apify start-run failed (HTTP ${startRes.status}): ${detail.slice(0, 300)}`);
+    }
+    console.warn(
+      `[apify] pinned build ${ACTOR_BUILD} no longer exists — falling back to "${FALLBACK_BUILD}". ` +
+        "Re-pin APIFY_ACTOR_BUILD to a current build once it's verified.",
+    );
+    startRes = await startWithBuild(FALLBACK_BUILD);
+  }
   if (!startRes.ok) {
     const detail = await startRes.text().catch(() => "");
     throw new Error(`Apify start-run failed (HTTP ${startRes.status}): ${detail.slice(0, 300)}`);

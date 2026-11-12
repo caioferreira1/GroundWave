@@ -2,6 +2,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { classifyPost } from "@/lib/ai/classifier";
 import { notifyNewRelevantPosts } from "@/lib/notifications/relevant-posts";
+import { notifyIngestionError } from "@/lib/notifications/ingestion-error";
 import {
   ApifyRunError,
   parseRunResult,
@@ -220,6 +221,7 @@ export async function dispatchCompanyIngestion(
       .from("companies")
       .update({ posts_last_fetched_at: now, posts_last_error: message, posts_last_error_at: now })
       .eq("id", company.id);
+    await notifyIngestionError(company.id, message);
     throw err;
   }
 }
@@ -283,5 +285,6 @@ export async function completeCompanyIngestion(companyId: string, resource: Apif
       .from("companies")
       .update({ posts_last_fetched_at: now, posts_last_error: message, posts_last_error_at: now })
       .eq("id", companyId);
+    await notifyIngestionError(companyId, message);
   }
 }
